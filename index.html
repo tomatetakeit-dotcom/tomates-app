@@ -240,6 +240,13 @@
   .perm-table tr.pm-mod td { font-weight: 700; background: var(--good-soft); font-size: 12px; }
   .perm-table input[type=checkbox] { width: 18px; height: 18px; }
 
+/* Tipo de pedido: Domicilio / Mesa / Barra */
+.ot-chips { display:flex; flex-wrap:wrap; gap:8px; margin:6px 0 4px; }
+button.ot-chip { width:auto; min-height:44px; padding:0 14px; border-radius:999px; border:1.5px solid var(--border);
+  background:var(--card); color:var(--fg); font-size:14px; font-weight:600; cursor:pointer; }
+button.ot-chip.on { background:var(--tm-red, #ff3035); border-color:var(--tm-red, #ff3035); color:#111111; font-weight:800; }
+.ot-cust { border:1px solid var(--border); border-radius:0.75rem; padding:12px; margin-top:12px; background:var(--card); }
+
   /* ==================================================================
      Identidad Tomates Pizzería (guía web/PWA 1.0) — se carga después
      de los estilos originales y solo redefine tokens y componentes.
@@ -1007,7 +1014,7 @@ function renderOrders(){
     const st = o.status==='entregado' ? 'entregado' : (o.status==='listo' ? 'listo' : 'pendiente');
     const itemsTxt = (o.items||[]).map(it=>`${it.qty}× ${it.name}`).join(', ');
     const myPendingRequest = state.editRequests.find(r=>r.orderId===o.id && r.status==='pendiente');
-    const title = o.customerName ? o.customerName : ('Pedido #'+(o.id||'').slice(0,5));
+    const title = o.customerName ? o.customerName : (o.spot || ('Pedido #'+(o.id||'').slice(0,5)));
     const pill = st==='entregado' ? '<span class="pill good">Entregado</span>'
       : st==='listo' ? '<span class="pill ready">Listo</span>'
       : '<span class="pill warn">En cocina</span>';
@@ -1031,6 +1038,8 @@ function renderOrders(){
       </div>
       <div class="item-meta">#${(o.id||'').slice(0,5)} · ${fmtOrderDateTime(o)}</div>
       <div class="item-meta" style="margin-top:6px;color:var(--fg)">${itemsTxt}</div>
+      ${o.orderType==='local' && o.spot ? `<div class="item-meta" style="color:var(--fg);font-weight:700">🍽️ ${esc(o.spot)}</div>`:''}
+      ${o.orderType==='domicilio' && o.customerAddress ? `<div class="item-meta" style="color:var(--fg)">📍 ${esc(o.customerAddress)}${o.customerPhone?' · 📱 '+esc(phoneLast10(o.customerPhone)):''}</div>`:''}
       ${o.deliveryFee? `<div class="item-meta">🛵 Domicilio: ${fmt(o.deliveryFee)}${o.deliveryService?' · '+esc(o.deliveryService):''}</div>`:''}
       ${timeline}
       <div class="row" style="margin-top:8px">
@@ -1135,6 +1144,49 @@ let orderDeliveryFee = 0;
 const DELIVERY_FEE_OPTIONS = [2000, 5000];
 let orderDeliveryManual = false;   // tarifa escrita a mano (domicilio por servicio externo)
 let orderDeliveryService = '';
+const ORDER_SPOTS = ['Mesa 1','Mesa 2','Mesa 3','Barra 1','Barra 2','Barra 3','Barra 4'];
+let orderType = '';   // 'domicilio' | 'local'
+let orderSpot = '';   // Mesa 1 … Barra 4
+let orderCust = { phone:'', name:'', address:'', id:null, auto:false };
+function phoneLast10(v){ return String(v||'').replace(/\D/g,'').slice(-10); }
+function normPhoneCO(v){ let d = String(v||'').replace(/\D/g,''); if(d.length===10) d = '57'+d; return (d.length===12 && d.startsWith('57')) ? d : ''; }
+function findCustomerByPhone(v){ const k = phoneLast10(v); if(k.length<10) return null; return state.customers.find(c=>phoneLast10(c.phone)===k) || null; }
+function orderCustInfoText(){
+  const k = phoneLast10(orderCust.phone);
+  if(k.length<10) return 'Escribe los 10 dígitos del celular.';
+  const c = findCustomerByPhone(k);
+  if(c){ const n = customerStats(c.id).count; return '✔ Cliente registrado' + (n ? ' · '+n+' pedido'+(n===1?'':'s') : '') + '. Si cambias el nombre o la dirección, se actualizan.'; }
+  return 'Cliente nuevo: quedará guardado con este celular.';
+}
+function selectOrderType(t, spot){
+  orderType = t; orderSpot = t==='local' ? (spot||'') : '';
+  if(t!=='domicilio'){ orderDeliveryFee = 0; orderDeliveryManual = false; orderDeliveryService = ''; }
+  renderOrderMainScreen();
+  if(t==='domicilio') setTimeout(()=>{ const el = document.getElementById('ordCustPhone'); if(el && !el.value) el.focus(); }, 0);
+}
+function onOrderCustInput(field){
+  const ids = { phone:'ordCustPhone', name:'ordCustName', address:'ordCustAddress' };
+  const el = document.getElementById(ids[field]);
+  orderCust[field] = el ? el.value : '';
+  if(field!=='phone') orderCust.auto = false;
+  if(field==='phone'){
+    const c = findCustomerByPhone(orderCust.phone);
+    if(c){
+      if(orderCust.id!==c.id && (orderCust.auto || (!orderCust.name && !orderCust.address))){
+        orderCust.name = c.name||''; orderCust.address = c.address||''; orderCust.auto = true;
+        const n = document.getElementById('ordCustName'); if(n) n.value = orderCust.name;
+        const a = document.getElementById('ordCustAddress'); if(a) a.value = orderCust.address;
+      }
+      orderCust.id = c.id;
+    } else { orderCust.id = null; }
+    const info = document.getElementById('ordCustInfo'); if(info) info.textContent = orderCustInfoText();
+  }
+  setOrderErr('');
+}
+function setOrderErr(msg, focusId){
+  const er = document.getElementById('orderSaveErr'); if(er) er.textContent = msg||'';
+  if(focusId){ const el = document.getElementById(focusId); if(el) el.focus(); }
+}
 
 function productImageSrc(p){
   if(p.imageDataUrl) return p.imageDataUrl;
@@ -1178,10 +1230,14 @@ function openOrderModal(orderId){
     orderDeliveryFee = o ? (o.deliveryFee||0) : 0;
     orderDeliveryManual = !!(o && (o.deliveryService || (orderDeliveryFee>0 && !DELIVERY_FEE_OPTIONS.includes(orderDeliveryFee))));
     orderDeliveryService = (o && o.deliveryService) || '';
+    orderType = (o && o.orderType) || ''; orderSpot = (o && o.spot) || '';
+    orderCust = { phone: o && o.orderType==='domicilio' ? phoneLast10(o.customerPhone) : '', name: (o && o.orderType==='domicilio' && o.customerName) || '',
+                  address: (o && o.customerAddress) || '', id: (o && o.customerId) || null, auto:false };
   } else {
     orderCart = [];
     orderDeliveryFee = 0;
     orderDeliveryManual = false; orderDeliveryService = '';
+    orderType = ''; orderSpot = ''; orderCust = { phone:'', name:'', address:'', id:null, auto:false };
   }
   renderOrderMainScreen();
   modalBg.classList.add('open');
@@ -1267,16 +1323,27 @@ function renderOrderMainScreen(){
   modalBody.innerHTML = `
     <h3>${editingOrderId ? 'Editar pedido' : 'Nuevo pedido'}</h3>
     ${needsApproval ? '<div class="banner">Como cajero, este cambio quedará pendiente de aprobación de un administrador.</div>':''}
+    <label style="margin-top:4px">¿Dónde es el pedido? *</label>
+    <div class="ot-chips">
+      <button type="button" class="ot-chip${orderType==='domicilio'?' on':''}" onclick="selectOrderType('domicilio')">🛵 Domicilio</button>
+      ${ORDER_SPOTS.map(sp=>`<button type="button" class="ot-chip${orderType==='local'&&orderSpot===sp?' on':''}" onclick="selectOrderType('local','${sp}')">${sp}</button>`).join('')}
+    </div>
     ${backButtonHtml}
     <div class="prod-grid">${gridHtml}</div>
     <label style="margin-top:14px">Carrito</label>
     <div id="cartWrap">${cartHtml}</div>
-    <label>Domicilio (opcional, se paga en su totalidad al domiciliario)</label>
-    <div class="prod-grid" style="grid-template-columns:repeat(4,1fr)">
-      <div class="prod-tile${!orderDeliveryFee && !orderDeliveryManual?' prod-tile-selected':''}" onclick="selectDeliveryFee(0)">
-        <div style="width:48px;height:48px;border-radius:10px;background:var(--bg);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:20px">🚫</div>
-        <div class="prod-tile-name">Sin<br>domicilio</div>
-      </div>
+    ${orderType==='domicilio' ? `
+    <div class="ot-cust">
+      <label style="margin-top:0">Celular del cliente *</label>
+      <input id="ordCustPhone" type="tel" inputmode="numeric" autocomplete="off" placeholder="3001234567" value="${esc(orderCust.phone)}" oninput="onOrderCustInput('phone')">
+      <div id="ordCustInfo" class="item-meta" style="margin-top:4px">${esc(orderCustInfoText())}</div>
+      <label>Nombre *</label>
+      <input id="ordCustName" autocomplete="off" placeholder="Nombre del cliente" value="${esc(orderCust.name)}" oninput="onOrderCustInput('name')">
+      <label>Dirección *</label>
+      <input id="ordCustAddress" autocomplete="off" placeholder="Calle, número, barrio e indicaciones" value="${esc(orderCust.address)}" oninput="onOrderCustInput('address')">
+    </div>
+    <label>Tarifa del domicilio * (se paga en su totalidad al domiciliario)</label>
+    <div class="prod-grid" style="grid-template-columns:repeat(3,1fr)">
       ${DELIVERY_FEE_OPTIONS.map(v=>`
         <div class="prod-tile${!orderDeliveryManual && orderDeliveryFee===v?' prod-tile-selected':''}" onclick="selectDeliveryFee(${v})">
           <div style="width:48px;height:48px;border-radius:10px;background:var(--accent-soft);color:var(--accent);display:flex;align-items:center;justify-content:center;font-size:22px">🛵</div>
@@ -1297,7 +1364,8 @@ function renderOrderMainScreen(){
           <input id="orderDeliveryService" type="text" maxlength="60" placeholder="Ej: Rappi, mensajería" value="${esc(orderDeliveryService)}" oninput="onManualDeliveryInput()" ${can('ventas.domicilio_manual')?'':'readonly'}></div>
       </div>
       <div id="orderDeliveryErr" class="item-meta" style="color:var(--bad)"></div>` : ''}
-    <label>Cliente (opcional, para enviar el pedido por WhatsApp)</label>
+    ` : ''}
+    ${orderType!=='domicilio' ? `<label>Cliente (opcional, para enviar el pedido por WhatsApp)</label>
     <select id="orderCustomer" onchange="toggleNewCustomerFields()">
       <option value="">— sin cliente —</option>
       ${state.customers.map(c=>`<option value="${c.id}" ${existingOrder&&existingOrder.customerId===c.id?'selected':''}>${c.name}</option>`).join('')}
@@ -1306,9 +1374,10 @@ function renderOrderMainScreen(){
     <div id="newCustomerFields" style="display:none">
       <label>Nombre del cliente</label><input id="orderNewCustName" placeholder="Nombre">
       <label>WhatsApp</label><input id="orderNewCustPhone" placeholder="573001234567">
-    </div>
+    </div>` : ''}
     <label>Total</label>
     <div class="item-name" id="orderTotalPreview" style="font-size:18px">${fmt(total)}</div>
+    <div id="orderSaveErr" class="item-meta" style="color:var(--bad);font-weight:700;margin-top:8px"></div>
     <div class="modal-actions">
       <button class="secondary" onclick="closeModal()">Cancelar</button>
       <button class="primary" onclick="saveOrder()">${needsApproval ? 'Enviar solicitud de cambio' : (editingOrderId ? 'Guardar cambios' : 'Guardar pedido')}</button>
@@ -1419,15 +1488,30 @@ async function saveOrder(){
     return;
   }
   const deliveryService = orderDeliveryManual ? (orderDeliveryService || 'Servicio externo') : '';
+  if(orderType!=='domicilio' && !(orderType==='local' && orderSpot)){ setOrderErr('Elige si el pedido es Domicilio o una mesa/barra del local (arriba).'); return; }
+  let dom = null, custFields = {};
+  if(orderType==='domicilio'){
+    const phone = normPhoneCO(orderCust.phone), name = (orderCust.name||'').trim(), address = (orderCust.address||'').trim();
+    if(!phone){ setOrderErr('Escribe el celular del cliente (10 dígitos).', 'ordCustPhone'); return; }
+    if(!name){ setOrderErr('Escribe el nombre del cliente.', 'ordCustName'); return; }
+    if(!address){ setOrderErr('Escribe la dirección del domicilio.', 'ordCustAddress'); return; }
+    if(!(deliveryFee>0)){ setOrderErr('Elige la tarifa del domicilio.'); return; }
+    let cid = null;
+    try{ cid = await TOM.rpc('upsert_customer', { p_phone: phone, p_name: name, p_address: address }); }
+    catch(e){ setOrderErr('No se pudo guardar el cliente: ' + ((e && e.message) || e)); return; }
+    dom = { phone, name, address };
+    custFields = { customerId: cid, customerName: name, customerPhone: phone, customerAddress: address };
+  }
+  const placeFields = { orderType, spot: orderType==='local' ? orderSpot : '' };
   const total = orderCart.reduce((s,l)=>s+l.price*l.qty,0) + deliveryFee;
 
   if(editingOrderId){
     if(can('ventas.editar')){
-      await db.collection('orders').doc(editingOrderId).update({ items, total, deliveryFee, deliveryService });
+      await db.collection('orders').doc(editingOrderId).update({ items, total, deliveryFee, deliveryService, ...placeFields, ...custFields });
     } else {
       const mine = state.roles.find(r=>r.id===myUid);
       await db.collection('editRequests').add({
-        orderId: editingOrderId, proposedItems: items, proposedTotal: total, proposedDeliveryFee: deliveryFee, proposedDeliveryService: deliveryService,
+        orderId: editingOrderId, proposedItems: items, proposedTotal: total, proposedDeliveryFee: deliveryFee, proposedDeliveryService: deliveryService, proposedPlace: placeFields, proposedCustomer: custFields,
         requestedBy: myUid, requestedByName: (mine&&mine.name)||'Cajero',
         status:'pendiente', createdAt: Date.now(),
       });
@@ -1451,10 +1535,12 @@ async function saveOrder(){
     const c = state.customers.find(x=>x.id===custSel.value);
     if(c){ customerId = c.id; customerName = c.name; customerPhone = c.phone||''; }
   }
-  await db.collection('orders').add({ date: todayStr(), items, total, deliveryFee, deliveryService, status:'pendiente', createdAt: Date.now(), customerId, customerName, customerPhone });
+  if(dom){ customerId = custFields.customerId; customerName = dom.name; customerPhone = dom.phone; }
+  await db.collection('orders').add({ date: todayStr(), items, total, deliveryFee, deliveryService, status:'pendiente', createdAt: Date.now(), customerId, customerName, customerPhone, customerAddress: dom ? dom.address : '', ...placeFields });
   orderCart = [];
   orderDeliveryFee = 0;
   orderDeliveryManual = false; orderDeliveryService = '';
+  orderType = ''; orderSpot = ''; orderCust = { phone:'', name:'', address:'', id:null, auto:false };
   closeModal();
 }
 
@@ -2698,6 +2784,7 @@ function renderCustomers(){
         <span class="pill accent">${st.count} pedidos</span>
       </div>
       <div class="item-meta">${c.phone||'Sin WhatsApp'}${st.lastDate?(' · último pedido '+st.lastDate):''}</div>
+      ${c.address ? `<div class="item-meta">📍 ${esc(c.address)}</div>` : ''}
       <div class="row" style="margin-top:6px"><span class="item-meta">Total gastado: ${fmt(st.total)}</span></div>
       <div class="row" style="margin-top:8px">
         ${c.phone? `<button class="ghost" onclick='openWhatsApp("${c.phone}", ${JSON.stringify(c.name||'')})'>WhatsApp</button>`:''}
@@ -2713,6 +2800,7 @@ function openCustomerModal(id){
     <h3>${c?'Editar cliente':'Nuevo cliente'}</h3>
     <label>Nombre</label><input id="cuName" value="${c?c.name:''}" placeholder="Nombre del cliente">
     <label>WhatsApp (con indicativo, ej. 573001234567)</label><input id="cuPhone" value="${c?c.phone||'':''}" placeholder="573001234567">
+    <label>Dirección</label><input id="cuAddress" value="${c?esc(c.address||''):''}" placeholder="Calle, número, barrio e indicaciones">
     <label>Notas (opcional)</label><input id="cuNotes" value="${c?c.notes||'':''}" placeholder="Alergias, preferencias...">
     <div class="modal-actions">
       <button class="secondary" onclick="closeModal()">Cancelar</button>
@@ -2727,6 +2815,7 @@ async function saveCustomer(id){
     name: document.getElementById('cuName').value.trim(),
     phone: document.getElementById('cuPhone').value.trim().replace(/[^0-9]/g,''),
     notes: document.getElementById('cuNotes').value.trim(),
+    address: document.getElementById('cuAddress').value.trim(),
   };
   if(!data.name) return;
   if(id) await db.collection('customers').doc(id).update(data);
@@ -2779,7 +2868,7 @@ async function exportExcel(){
   const wb = XLSX.utils.book_new();
 
   const pedidos = state.orders.map(o=>({
-    id: o.id, fecha: o.date, cliente: o.customerName||'', telefono: o.customerPhone||'',
+    id: o.id, fecha: o.date, tipo: o.orderType==='domicilio' ? 'Domicilio' : (o.orderType==='local' ? 'Local' : ''), ubicacion: o.spot||'', cliente: o.customerName||'', telefono: o.customerPhone||'', direccion: o.customerAddress||'',
     items: (o.items||[]).map(it=>`${it.qty}x ${it.name}`).join(', '),
     total: o.total||0, estado: o.status||'', pago: o.paymentMethodLabel||'', montoPago: o.paymentAmount||''
   }));
@@ -2819,7 +2908,7 @@ async function exportExcel(){
   }));
   const clientes = state.customers.map(c=>{
     const st = customerStats(c.id);
-    return { id: c.id, nombre: c.name, telefono: c.phone||'', notas: c.notes||'',
+    return { id: c.id, nombre: c.name, telefono: c.phone||'', direccion: c.address||'', notas: c.notes||'',
       pedidos: st.count, totalGastado: Math.round(st.total), ultimoPedido: st.lastDate||'' };
   });
   const conteos = state.counts.map(c=>({
@@ -3040,7 +3129,7 @@ function renderHistResults(){
     detailHtml = [...cur].sort((a,b)=>(b.createdAt||0)-(a.createdAt||0)).map(o=>`
       <div class="row" style="padding:7px 0;border-bottom:1px solid var(--border);align-items:flex-start">
         <div>
-          <div class="item-name" style="font-size:13px">${o.customerName||('Pedido #'+(o.id||'').slice(0,5))}</div>
+          <div class="item-name" style="font-size:13px">${o.customerName||o.spot||('Pedido #'+(o.id||'').slice(0,5))}</div>
           <div class="item-meta">${o.createdAt?fmtTime(o.createdAt):''}${o.createdAt&&o.deliveredAt&&o.deliveredAt>=o.createdAt?' · total '+fmtDur(o.deliveredAt-o.createdAt):''}</div>
           <div class="item-meta">${(o.items||[]).map(it=>`${it.qty}× ${it.name}`).join(', ')}</div>
         </div>
