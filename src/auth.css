@@ -24,3 +24,37 @@ button.ot-chip { width:auto; min-height:44px; padding:0 14px; border-radius:999p
   background:var(--card); color:var(--fg); font-size:14px; font-weight:600; cursor:pointer; }
 button.ot-chip.on { background:var(--tm-red, #ff3035); border-color:var(--tm-red, #ff3035); color:#111111; font-weight:800; }
 .ot-cust { border:1px solid var(--border); border-radius:0.75rem; padding:12px; margin-top:12px; background:var(--card); }
+
+/* Pantalla de cocina */
+body.kds-wide main { max-width: 1500px; }
+.kds-head { display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:10px; }
+.kds-head-actions { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+.kds-head-actions button.ghost { width:auto; border:1px solid var(--border); border-radius:999px; padding:6px 12px; }
+.kds-live { color:var(--tm-red, #ff3035); font-weight:700; font-size:13px; }
+.kds-kpis { display:grid; grid-template-columns:repeat(auto-fit, minmax(150px,1fr)); gap:8px; margin-bottom:12px; }
+.kds-board { display:grid; grid-template-columns:repeat(auto-fit, minmax(260px,1fr)); gap:12px; align-items:start; }
+.kds-col { background:var(--bg); border:1px solid var(--border); border-radius:0.9rem; padding:10px; min-height:120px; }
+.kds-col-h { font-family:Anton, Impact, sans-serif; text-transform:uppercase; letter-spacing:.02em; font-size:18px; margin:2px 4px 10px; display:flex; align-items:center; gap:6px; }
+.kds-count { margin-left:auto; background:var(--fg); color:var(--bg); border-radius:999px; padding:1px 10px; font-family:Arial, sans-serif; font-size:14px; font-weight:700; }
+.kds-col-horno .kds-col-h { color:var(--tm-red, #ff3035); }
+.kds-card { background:var(--card); border:2px solid var(--border); border-radius:0.75rem; padding:12px; margin-bottom:10px; }
+.kds-card-top { display:flex; justify-content:space-between; gap:8px; align-items:baseline; }
+.kds-num { font-family:Anton, Impact, sans-serif; font-size:22px; letter-spacing:.02em; }
+.kds-place { font-weight:800; font-size:15px; }
+.kds-who { font-size:13.5px; color:var(--muted); margin-top:2px; }
+.kds-items { list-style:none; margin:8px 0; padding:0; font-size:17px; line-height:1.35; }
+.kds-items li { padding:2px 0; }
+.kds-times { display:flex; flex-direction:column; gap:2px; }
+.kds-timer { font-size:16px; }
+.kds-timer b { font-size:20px; font-variant-numeric:tabular-nums; }
+.kds-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+.kds-actions .kds-go { flex:1 1 100%; min-height:52px; font-size:16px; }
+.kds-actions .kds-alt { width:auto; flex:1; min-height:40px; border:1px solid var(--border); border-radius:0.5rem; }
+.kds-empty { color:var(--muted); text-align:center; padding:18px 0; font-size:14px; }
+.kds-card.kds-late { border-color:var(--tm-red, #ff3035); box-shadow:0 0 0 2px rgba(255,48,53,.25); }
+.kds-card.kds-late .kds-timer b { color:var(--tm-red, #ff3035); }
+.kds-card.kds-fresh { animation:kdsPulse 1s ease-in-out 0s 6; }
+@keyframes kdsPulse { 0%,100% { box-shadow:0 0 0 0 rgba(255,48,53,0); } 50% { box-shadow:0 0 0 6px rgba(255,48,53,.45); } }
+@media (prefers-reduced-motion: reduce){ .kds-card.kds-fresh { animation:none; border-color:var(--tm-red, #ff3035); } }
+.kds-kpis .kpi { padding:10px 12px; }
+.kds-kpis .kpi .v { font-size:20px; }
