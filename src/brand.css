@@ -1,0 +1,106 @@
+  /* ==================================================================
+     Identidad Tomates Pizzería (guía web/PWA 1.0) — se carga después
+     de los estilos originales y solo redefine tokens y componentes.
+     Rojo #FF3035 · Blanco #FFFFFF · Negro #111111. El rojo nunca lleva
+     texto blanco pequeño; el texto rojo pequeño solo va sobre fondo oscuro.
+  ================================================================== */
+  :root {
+    --tm-red: #ff3035; --tm-white: #ffffff; --tm-black: #111111;
+    --tm-font-display: Impact, "Haettenschweiler", "Anton", "Arial Narrow Bold", "Arial Narrow", Arial, sans-serif; /* Anton (OFL) solo donde no hay Impact */
+    --tm-font-body: Arial, Helvetica, sans-serif;
+    --tm-target-min: 3rem;
+    --tm-control-border: #767676;
+    --tm-red-ink: var(--tm-black);       /* texto que acompaña marcas rojas en fondo claro */
+    --bg: #ffffff; --fg: #111111; --muted: #555555; --card: #ffffff; --border: #d5d5d5;
+    --accent: var(--tm-red); --accent-fg: var(--tm-black); --accent-soft: #ffe1e2;
+    --good: #111111; --good-soft: #f2f2f2;
+    --bad: var(--tm-red); --bad-soft: #ffe1e2; --warn: var(--tm-red); --warn-soft: #ffe1e2;
+    --shadow: none;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #111111; --fg: #ffffff; --muted: #bdbdbd; --card: #1c1c1c; --border: #3a3a3a;
+      --tm-control-border: #8a8a8a; --tm-red-ink: var(--tm-red);
+      --accent-soft: #3a1416; --good: #ffffff; --good-soft: #2a2a2a; --bad-soft: #3a1416; --warn-soft: #3a1416;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #111111; --fg: #ffffff; --muted: #bdbdbd; --card: #1c1c1c; --border: #3a3a3a;
+    --tm-control-border: #8a8a8a; --tm-red-ink: var(--tm-red);
+    --accent-soft: #3a1416; --good: #ffffff; --good-soft: #2a2a2a; --bad-soft: #3a1416; --warn-soft: #3a1416;
+    color-scheme: dark;
+  }
+
+  body { font-family: var(--tm-font-body); font-size: 16px; line-height: 1.45; padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px)); }
+
+  /* Encabezado: nombre del negocio como texto (el logo completo va en el acceso) */
+  header .logo { display: none; }
+  header h1 { font-family: var(--tm-font-display); font-weight: 400; font-size: 24px; letter-spacing: .02em; text-transform: uppercase; line-height: 1.05; }
+  header .sub { font-size: 13px; }
+  .top-sticky { border-bottom: 2px solid var(--tm-black); }
+  :root[data-theme="dark"] .top-sticky { border-bottom-color: var(--tm-red); }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .top-sticky { border-bottom-color: var(--tm-red); } }
+
+  h2.section-title { font-family: var(--tm-font-display); font-weight: 400; font-size: 26px; letter-spacing: .02em; text-transform: uppercase; line-height: 1.05; margin: 6px 0 14px; }
+  .modal h3, .auth-card h2 { font-family: var(--tm-font-display); font-weight: 400; font-size: 24px; letter-spacing: .02em; text-transform: uppercase; }
+
+  /* Botones: rojo con texto negro y borde negro; secundario blanco/negro */
+  button.primary, .top-action button.big-action {
+    background: var(--tm-red); color: var(--tm-black); border: 2px solid var(--tm-black);
+    border-radius: 0.375rem; min-height: var(--tm-target-min); font-weight: 700; box-shadow: none;
+  }
+  .top-action button.big-action { font-size: 18px; border-radius: 0.5rem; }
+  button.primary:disabled { background: var(--good-soft); color: var(--muted); border-style: dashed; cursor: not-allowed; }
+  button.secondary {
+    background: var(--card); color: var(--fg); border: 2px solid var(--fg);
+    border-radius: 0.375rem; min-height: var(--tm-target-min); font-weight: 700; font-size: 14px;
+  }
+  button.ghost { color: var(--fg); min-height: 40px; padding: 8px 6px; font-size: 13.5px; }
+  .fab { background: var(--tm-red); color: var(--tm-black); border: 2px solid var(--tm-black); }
+
+  /* Campos */
+  label { font-size: 13.5px; color: var(--fg); }
+  input, select, textarea { min-height: var(--tm-target-min); font-size: 16px; border: 1px solid var(--tm-control-border); border-radius: 0.375rem; padding: 10px 12px; }
+  textarea { min-height: 96px; }
+  input[type=checkbox], input[type=radio] { min-height: 0; width: 20px; height: 20px; accent-color: var(--tm-red); }
+
+  /* Estados: marca roja + texto legible, nunca solo color */
+  .pill { font-size: 12px; padding: 3px 9px; border: 1.5px solid transparent; }
+  .pill.accent { background: var(--tm-red); color: var(--tm-black); border-color: var(--tm-black); }
+  .pill.bad, .pill.warn { background: var(--bad-soft); color: var(--fg); border-color: var(--tm-red); }
+  .pill.good { background: var(--good-soft); color: var(--fg); border-color: var(--border); }
+  .banner { background: var(--warn-soft); color: var(--fg); border-left: 4px solid var(--tm-red); border-radius: 0.375rem; font-size: 14px; }
+  .prod-tile-price { color: var(--fg); }
+  .prod-tile-selected { border-color: var(--tm-red); }
+  .segmented button { min-height: 40px; font-size: 14px; }
+  .segmented button.active { background: var(--tm-red); color: var(--tm-black); }
+  .card { border-radius: 0.75rem; }
+  .kpi .v { font-size: 21px; }
+  .item-meta { font-size: 13px; }
+  .item-name { font-size: 15.5px; }
+
+  /* Barra inferior: destino actual con texto y barra roja */
+  nav.tabbar { border-top: 2px solid var(--tm-black); padding-bottom: env(safe-area-inset-bottom, 0px); }
+  nav.tabbar button { min-height: 56px; min-width: 72px; font-size: 12px; color: var(--muted); position: relative; }
+  nav.tabbar button.active { color: var(--fg); font-weight: 700; }
+  nav.tabbar button.active::before { content: ""; position: absolute; top: 0; left: 18%; right: 18%; height: 4px; background: var(--tm-red); border-radius: 0 0 3px 3px; }
+
+  /* Foco visible */
+  :focus-visible { outline: 3px solid var(--tm-white); outline-offset: 2px; box-shadow: 0 0 0 6px var(--tm-black); }
+
+  /* Acceso */
+  .auth-card { border: 2px solid var(--tm-black); box-shadow: none; text-align: left; }
+  .auth-logo { height: auto; width: 200px; max-width: 100%; aspect-ratio: 1 / 1; border-radius: 0.75rem; margin: 0 auto 8px; display: block; }
+  .auth-msg { background: var(--warn-soft); border-left: 4px solid var(--tm-red); color: var(--fg); }
+  #userChip .uc-out { min-height: 40px; }
+
+  /* Avisos de la app instalada */
+  .net-banner { position: sticky; top: 0; z-index: 6; background: var(--tm-black); color: var(--tm-white); font-size: 14px; padding: 10px max(16px, env(safe-area-inset-left, 0px)); border-bottom: 3px solid var(--tm-red); }
+  .net-banner[hidden] { display: none; }
+  .update-bar { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(70px + env(safe-area-inset-bottom, 0px)); z-index: 30; width: min(92%, 440px);
+    background: var(--card); color: var(--fg); border: 2px solid var(--tm-black); border-radius: 0.75rem; padding: 10px 12px; display: flex; gap: 10px; align-items: center; justify-content: space-between; font-size: 14px; }
+  .update-bar[hidden] { display: none; }
+  .update-bar button.primary { width: auto; padding: 8px 14px; }
+
+  @media (prefers-reduced-motion: reduce) { .tab.active { animation: none; } }
