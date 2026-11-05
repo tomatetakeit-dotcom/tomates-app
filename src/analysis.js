@@ -159,6 +159,31 @@
     (state.purchases||[]).filter(p=>p.date && p.date>=from && p.date<=to).forEach(p=>{ const b = B[keyOf(p.date)]; if(b) b.purchases += p.totalCost||0; });
 
     const rows = keys.map(k=>B[k]);
+    // Ventas por tipo de pedido
+    const TYPES = [['domicilio','🛵 Domicilio'],['mesa','🍽️ Mesas'],['barra','🍺 Barra'],['llevar','🥡 Para llevar'],['otro','Sin clasificar']];
+    const typeOf = (o)=> o.orderType==='domicilio' || (!o.orderType && o.deliveryFee) ? 'domicilio' : o.orderType==='llevar' ? 'llevar'
+      : o.orderType==='local' ? (/^barra/i.test(o.spot||'') ? 'barra' : 'mesa') : 'otro';
+    const byType = {}; TYPES.forEach(([k])=> byType[k] = { n:0, sales:0 });
+    const spots = {};
+    (state.orders||[]).filter(o=>o.status==='entregado' && o.date && o.date>=from && o.date<=to).forEach(o=>{
+      const t = byType[typeOf(o)]; t.n += 1; t.sales += (o.total||0) - (o.deliveryFee||0);
+      if(o.orderType==='local' && o.spot){ const sp = spots[o.spot] = spots[o.spot] || { n:0, sales:0 }; sp.n += 1; sp.sales += (o.total||0); }
+    });
+    const typeRows = TYPES.filter(([k])=> k!=='otro' || byType.otro.n>0).map(([k,l])=>({ k, l, ...byType[k] }));
+    // Tiempos de cocina (promedios por periodo)
+    const KT = {}; keys.forEach(k=> KT[k] = { wait:[], prep:[], oven:[], total:[], deliv:[] });
+    (state.orders||[]).filter(o=>o.date && o.date>=from && o.date<=to && o.createdAt).forEach(o=>{
+      const t = KT[keyOf(o.date)]; if(!t) return;
+      if(o.prepAt) t.wait.push(o.prepAt - o.createdAt);
+      if(o.prepAt && (o.ovenAt||o.readyAt)) t.prep.push((o.ovenAt||o.readyAt) - o.prepAt);
+      if(o.ovenAt && o.readyAt) t.oven.push(o.readyAt - o.ovenAt);
+      if(o.readyAt) t.total.push(o.readyAt - o.createdAt);
+      if(o.readyAt && o.deliveredAt && o.deliveredAt>=o.readyAt) t.deliv.push(o.deliveredAt - o.readyAt);
+    });
+    const mins = (a)=> a.length ? (a.reduce((x,y)=>x+y,0)/a.length/60000) : null;
+    const minTxt = (v)=> v==null ? '—' : (v<1 ? '<1' : v.toLocaleString('es-CO',{maximumFractionDigits:1}))+' min';
+    const KTall = { wait:[], prep:[], oven:[], total:[], deliv:[] };
+    keys.forEach(k=> Object.keys(KTall).forEach(f=> KTall[f].push(...KT[k][f])));
     const T = rows.reduce((t,r)=>({ orders:t.orders+r.orders, sales:t.sales+r.sales, purchases:t.purchases+r.purchases, cogs:t.cogs+r.cogs }), {orders:0,sales:0,purchases:0,cogs:0});
     const diff = T.sales - T.purchases;
     const kpi = (v,l,cls)=>`<div class="kpi"><div class="v"${cls?` style="color:${cls}"`:''}>${v}</div><div class="l">${l}</div></div>`;
@@ -189,6 +214,23 @@
           <td style="text-align:right">${escH(fmt(r.cogs))}</td></tr>`).join('')}
           <tr style="font-weight:700"><td>Total</td><td style="text-align:right">${T.orders}</td><td style="text-align:right">${escH(fmt(T.sales))}</td><td style="text-align:right">${escH(fmt(T.purchases))}</td><td style="text-align:right">${escH(fmt(diff))}</td><td style="text-align:right">${escH(fmt(T.cogs))}</td></tr>
         </tbody></table></div>
+
+      <h3 class="section-title" style="font-size:20px;margin-top:18px">Ventas por tipo de pedido</h3>
+      <div class="perm-wrap"><table class="perm-table" style="min-width:420px">
+        <thead><tr><th style="text-align:left">Tipo</th><th>Pedidos</th><th>Ventas</th><th>% de ventas</th><th>Ticket promedio</th></tr></thead>
+        <tbody>${typeRows.map(r=>`<tr><td>${escH(r.l)}</td><td style="text-align:right">${r.n}</td><td style="text-align:right">${escH(fmt(r.sales))}</td>
+          <td style="text-align:right">${pctTxt(T.sales>0 ? r.sales/T.sales*100 : null)}</td><td style="text-align:right">${r.n ? escH(fmt(r.sales/r.n)) : '—'}</td></tr>`).join('')}</tbody></table></div>
+      ${Object.keys(spots).length ? `<div class="item-meta" style="margin-top:6px">Por ubicación: ${Object.keys(spots).sort().map(k=>`${escH(k)} ${spots[k].n} (${escH(fmt(spots[k].sales))})`).join(' · ')}</div>` : ''}
+
+      <h3 class="section-title" style="font-size:20px;margin-top:18px">Tiempos de cocina</h3>
+      <div class="perm-wrap"><table class="perm-table" style="min-width:620px">
+        <thead><tr><th style="text-align:left">Periodo</th><th>Pedidos medidos</th><th>Espera</th><th>Preparación</th><th>Horno</th><th>Pedido → listo</th><th>Listo → entregado</th></tr></thead>
+        <tbody>${keys.slice().reverse().map(k=>{ const t = KT[k]; return `<tr><td>${escH(labelOf(k))}</td><td style="text-align:right">${t.total.length}</td>
+          <td style="text-align:right">${minTxt(mins(t.wait))}</td><td style="text-align:right">${minTxt(mins(t.prep))}</td><td style="text-align:right">${minTxt(mins(t.oven))}</td>
+          <td style="text-align:right">${minTxt(mins(t.total))}</td><td style="text-align:right">${minTxt(mins(t.deliv))}</td></tr>`; }).join('')}
+          <tr style="font-weight:700"><td>Promedio</td><td style="text-align:right">${KTall.total.length}</td><td style="text-align:right">${minTxt(mins(KTall.wait))}</td><td style="text-align:right">${minTxt(mins(KTall.prep))}</td><td style="text-align:right">${minTxt(mins(KTall.oven))}</td><td style="text-align:right">${minTxt(mins(KTall.total))}</td><td style="text-align:right">${minTxt(mins(KTall.deliv))}</td></tr>
+        </tbody></table></div>
+      <div class="item-meta" style="margin-top:4px">Espera: desde que se toma el pedido hasta que cocina empieza a prepararlo. Preparación: hasta que entra al horno (o queda listo si no lleva horno). Horno: hasta que se marca listo.</div>
 
       <h3 class="section-title" style="font-size:20px;margin-top:18px">Productos vendidos</h3>
       ${prodRows.length ? `<div class="perm-wrap"><table class="perm-table" style="min-width:520px">
