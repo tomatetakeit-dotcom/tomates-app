@@ -30,6 +30,9 @@ s = rep(s, "requestedBy: myUid||null,", "requestedBy: myUid,")
 s = rep(s, "    if(!db) return;\n    const exists = state.categories.some(c=>c.scope==='gastos' && c.name==='Domicilios');",
            "    if(!db || !can('gastos.gestionar')) return;\n    const exists = state.categories.some(c=>c.scope==='gastos' && c.name==='Domicilios');")
 
+# Costo por unidad con decimales (los insumos se costean por gramo)
+s = rep(s, "Costo unit.: ${fmt(i.currentCost||0)}", "Costo: ${fmtCost(i.currentCost||0)} por ${i.unit}")
+
 # 2) Estilos de acceso, chip de usuario y matriz de permisos
 css = (here / "auth.css").read_text(encoding="utf-8") + "\n" + (here / "brand.css").read_text(encoding="utf-8")
 head_extra = """<meta name="theme-color" content="#FF3035">
@@ -58,6 +61,7 @@ if mock:
 else:
     s = rep(s, marker, marker + "\n" + pre)
 post = "<script>\n" + (here / "auth.js").read_text(encoding="utf-8") + "\n</script>\n"
+post += "<script>\n" + (here / "history.js").read_text(encoding="utf-8") + "\n</script>\n"
 post += "<script>\n" + (here / "pwa.js").read_text(encoding="utf-8") + "\n</script>\n"
 s = rep(s, "</body>", post + "</body>")
 
