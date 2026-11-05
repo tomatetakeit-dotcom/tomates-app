@@ -45,6 +45,8 @@
     }
   };
   window.can = (p)=>TOM.can(p);
+  // Costos por gramo o por unidad: con decimales cuando el valor es pequeño
+  window.fmtCost = (n)=>{ n = Number(n)||0; return '$' + n.toLocaleString('es-CO', { maximumFractionDigits: Math.abs(n) < 100 ? 2 : 0 }); };
 
   function wrapErr(error){
     const e = new Error(friendly(error));
