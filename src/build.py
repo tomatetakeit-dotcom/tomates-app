@@ -30,6 +30,13 @@ s = rep(s, "requestedBy: myUid||null,", "requestedBy: myUid,")
 s = rep(s, "    if(!db) return;\n    const exists = state.categories.some(c=>c.scope==='gastos' && c.name==='Domicilios');",
            "    if(!db || !can('gastos.gestionar')) return;\n    const exists = state.categories.some(c=>c.scope==='gastos' && c.name==='Domicilios');")
 
+# Menú: sin costo ni margen (esa información es solo del administrador, en la pestaña Análisis)
+s = rep(s, """      ${cost!==null ? `<div class="row" style="margin-top:6px">
+          <span class="item-meta">Costo: ${fmt(cost)}</span>
+          <span class="pill ${marginPct>=40?'good':marginPct>=20?'warn':'bad'}">Margen ${marginPct}%</span>
+        </div>` : ''}
+""", "")
+
 # Costo por unidad con decimales (los insumos se costean por gramo)
 s = rep(s, "Costo unit.: ${fmt(i.currentCost||0)}", "Costo: ${fmtCost(i.currentCost||0)} por ${i.unit}")
 
@@ -60,7 +67,8 @@ if mock:
     s = rep(s, marker, pre)  # sin internet en las pruebas
 else:
     s = rep(s, marker, marker + "\n" + pre)
-post = "<script>\n" + (here / "auth.js").read_text(encoding="utf-8") + "\n</script>\n"
+post = "<script>\n" + (here / "analysis.js").read_text(encoding="utf-8") + "\n</script>\n"
+post += "<script>\n" + (here / "auth.js").read_text(encoding="utf-8") + "\n</script>\n"
 post += "<script>\n" + (here / "history.js").read_text(encoding="utf-8") + "\n</script>\n"
 post += "<script>\n" + (here / "pwa.js").read_text(encoding="utf-8") + "\n</script>\n"
 s = rep(s, "</body>", post + "</body>")
