@@ -22,6 +22,7 @@ App web instalable (PWA) para ventas, cocina, caja, inventario, costeo, clientes
 2. `supabase/02_roles_permisos.sql` — roles (admin, supervisor, cajero, asesor, domiciliario), permisos por módulo e invitaciones.
 3. `supabase/03_merge_last_seen.sql` — actualización parcial de registros y registro de último ingreso.
 4. `supabase/04_seed_menu_inventario.sql` — menú, recetas e ingredientes iniciales (desde "Costeo Tomates.xlsx"). Se puede repetir sin duplicar.
+5. `supabase/05_historial_costos.sql` — historial de costos de insumos: cada cambio (inicial, compra o manual) queda guardado con fecha, origen y usuario.
 
 Edge Function: `supabase/functions/invite-user/index.ts` (verificación JWT legacy desactivada; la función valida la sesión y el permiso `usuarios.gestionar`).
 
@@ -40,7 +41,7 @@ Registro libre desactivado: solo entran personas invitadas por el administrador.
 python3 -I src/build.py "<Tomates App original>.html" salida/
 ```
 
-`build.py` toma la app original y le agrega `src/adapter.js` (capa Supabase), `src/auth.js` (acceso y permisos), `src/pwa.js`, `src/auth.css` y `src/brand.css`. Con `--mock` genera una versión de prueba con datos simulados (`src/mock.js`). Si cambia `sw.js`, subir su `VERSION`.
+`build.py` toma la app original y le agrega `src/adapter.js` (capa Supabase), `src/auth.js` (acceso y permisos), `src/history.js` (historial y análisis de costos), `src/pwa.js`, `src/auth.css` y `src/brand.css`. Con `--mock` genera una versión de prueba con datos simulados (`src/mock.js`). Si cambia `sw.js`, subir su `VERSION`.
 
 ## Marca
 
