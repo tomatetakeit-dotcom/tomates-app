@@ -11,7 +11,7 @@ const CORS = {
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { ...CORS, "Content-Type": "application/json" } });
 
-const ROLES = ["admin", "supervisor", "cajero", "asesor", "domiciliario"];
+const ROLES = ["admin", "supervisor", "cajero", "asesor", "domiciliario", "cocina"];
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
