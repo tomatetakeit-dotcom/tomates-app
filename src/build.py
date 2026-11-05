@@ -184,6 +184,7 @@ s = rep(s, """    ${backButtonHtml}
     <div class="prod-grid">${gridHtml}</div>""", """    <label style="margin-top:4px">¿Dónde es el pedido? *</label>
     <div class="ot-chips">
       <button type="button" class="ot-chip${orderType==='domicilio'?' on':''}" onclick="selectOrderType('domicilio')">🛵 Domicilio</button>
+      <button type="button" class="ot-chip${orderType==='llevar'?' on':''}" onclick="selectOrderType('llevar')">🥡 Para llevar</button>
       ${ORDER_SPOTS.map(sp=>`<button type="button" class="ot-chip${orderType==='local'&&orderSpot===sp?' on':''}" onclick="selectOrderType('local','${sp}')">${sp}</button>`).join('')}
     </div>
     ${backButtonHtml}
@@ -224,7 +225,7 @@ s = rep(s, """    <div class="modal-actions">
 # Guardar: validar tipo y cliente; guardar/actualizar el cliente por celular
 s = rep(s, """  const deliveryService = orderDeliveryManual ? (orderDeliveryService || 'Servicio externo') : '';""",
 """  const deliveryService = orderDeliveryManual ? (orderDeliveryService || 'Servicio externo') : '';
-  if(orderType!=='domicilio' && !(orderType==='local' && orderSpot)){ setOrderErr('Elige si el pedido es Domicilio o una mesa/barra del local (arriba).'); return; }
+  if(orderType!=='domicilio' && orderType!=='llevar' && !(orderType==='local' && orderSpot)){ setOrderErr('Elige si el pedido es Domicilio, Para llevar o una mesa/barra del local (arriba).'); return; }
   let dom = null, custFields = {};
   if(orderType==='domicilio'){
     const phone = normPhoneCO(orderCust.phone), name = (orderCust.name||'').trim(), address = (orderCust.address||'').trim();
@@ -259,9 +260,10 @@ s = rep(s, """  orderDeliveryManual = false; orderDeliveryService = '';
 
 # Lista de pedidos: mesa/barra o dirección
 s = rep(s, "const title = o.customerName ? o.customerName : ('Pedido #'+(o.id||'').slice(0,5));",
-           "const title = o.customerName ? o.customerName : (o.spot || ('Pedido #'+(o.id||'').slice(0,5)));")
+           "const title = o.customerName ? o.customerName : (o.spot || (o.orderType==='llevar' ? 'Para llevar' : ('Pedido #'+(o.id||'').slice(0,5))));")
 s = rep(s, "      ${o.deliveryFee? `<div class=\"item-meta\">🛵 Domicilio: ${fmt(o.deliveryFee)}${o.deliveryService?' · '+esc(o.deliveryService):''}</div>`:''}",
 """      ${o.orderType==='local' && o.spot ? `<div class="item-meta" style="color:var(--fg);font-weight:700">🍽️ ${esc(o.spot)}</div>`:''}
+      ${o.orderType==='llevar' ? `<div class="item-meta" style="color:var(--fg);font-weight:700">🥡 Para llevar (recoge en el local)</div>`:''}
       ${o.orderType==='domicilio' && o.customerAddress ? `<div class="item-meta" style="color:var(--fg)">📍 ${esc(o.customerAddress)}${o.customerPhone?' · 📱 '+esc(phoneLast10(o.customerPhone)):''}</div>`:''}
       ${o.deliveryFee? `<div class="item-meta">🛵 Domicilio: ${fmt(o.deliveryFee)}${o.deliveryService?' · '+esc(o.deliveryService):''}</div>`:''}""")
 s = rep(s, "${o.customerName||('Pedido #'+(o.id||'').slice(0,5))}", "${o.customerName||o.spot||('Pedido #'+(o.id||'').slice(0,5))}")
@@ -280,9 +282,13 @@ s = rep(s, """      <div class="item-meta">${c.phone||'Sin WhatsApp'}${st.lastDa
 
 # Excel
 s = rep(s, "    id: o.id, fecha: o.date, cliente: o.customerName||'', telefono: o.customerPhone||'',",
-           "    id: o.id, fecha: o.date, tipo: o.orderType==='domicilio' ? 'Domicilio' : (o.orderType==='local' ? 'Local' : ''), ubicacion: o.spot||'', cliente: o.customerName||'', telefono: o.customerPhone||'', direccion: o.customerAddress||'',")
+           "    id: o.id, fecha: o.date, tipo: o.orderType==='domicilio' ? 'Domicilio' : o.orderType==='llevar' ? 'Para llevar' : (o.orderType==='local' ? 'Local' : ''), ubicacion: o.spot||'', cliente: o.customerName||'', telefono: o.customerPhone||'', direccion: o.customerAddress||'',")
 s = rep(s, "return { id: c.id, nombre: c.name, telefono: c.phone||'', notas: c.notes||'',",
            "return { id: c.id, nombre: c.name, telefono: c.phone||'', direccion: c.address||'', notas: c.notes||'',")
+
+# Etapa de cocina en la tarjeta del pedido (v7)
+s = rep(s, "      : '<span class=\"pill warn\">En cocina</span>';",
+           "      : (o.kitchenStage==='horno' ? '<span class=\"pill warn\">🔥 En horno</span>' : o.kitchenStage==='preparacion' ? '<span class=\"pill warn\">🔪 En preparación</span>' : '<span class=\"pill warn\">🧾 En cola</span>');")
 
 # Costo por unidad con decimales (los insumos se costean por gramo)
 s = rep(s, "Costo unit.: ${fmt(i.currentCost||0)}", "Costo: ${fmtCost(i.currentCost||0)} por ${i.unit}")
@@ -315,6 +321,7 @@ if mock:
 else:
     s = rep(s, marker, marker + "\n" + pre)
 post = "<script>\n" + (here / "analysis.js").read_text(encoding="utf-8") + "\n</script>\n"
+post += "<script>\n" + (here / "kitchen.js").read_text(encoding="utf-8") + "\n</script>\n"
 post += "<script>\n" + (here / "auth.js").read_text(encoding="utf-8") + "\n</script>\n"
 post += "<script>\n" + (here / "history.js").read_text(encoding="utf-8") + "\n</script>\n"
 post += "<script>\n" + (here / "pwa.js").read_text(encoding="utf-8") + "\n</script>\n"
