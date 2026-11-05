@@ -2,7 +2,7 @@
 (function(){
   const PERMS = {
     supervisor: ['ventas.ver','ventas.crear','ventas.estado','ventas.cobrar','ventas.solicitar_cambio','ventas.editar','ventas.aprobar_cambios','domicilios.ver','domicilios.entregar','crm.ver','crm.responder','crm.estado','crm.plantillas','clientes.ver','clientes.editar','clientes.campanas','menu.ver_costos','inventario.ver','inventario.conteo','compras.gestionar','gastos.gestionar','caja.ver','caja.cuadrar','informes.ver','informes.exportar'],
-    cajero: ['ventas.ver','ventas.crear','ventas.estado','ventas.cobrar','ventas.solicitar_cambio','domicilios.ver','domicilios.entregar','clientes.ver','clientes.editar'],
+    cajero: ['ventas.ver','ventas.crear','ventas.domicilio_manual','ventas.estado','ventas.cobrar','ventas.solicitar_cambio','domicilios.ver','domicilios.entregar','clientes.ver','clientes.editar'],
     asesor: ['ventas.ver','ventas.crear','ventas.solicitar_cambio','crm.ver','crm.responder','crm.estado','clientes.ver','clientes.editar'],
     domiciliario: ['domicilios.ver','domicilios.entregar','ventas.cobrar'],
   };
