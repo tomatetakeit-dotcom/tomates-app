@@ -37,6 +37,90 @@ s = rep(s, """      ${cost!==null ? `<div class="row" style="margin-top:6px">
         </div>` : ''}
 """, "")
 
+# Domicilio: $2.000 y $5.000 fijos; tarifa escrita a mano (servicio externo) solo con permiso ventas.domicilio_manual
+s = rep(s, "const DELIVERY_FEE_OPTIONS = [2000, 5000, 7000];",
+"""const DELIVERY_FEE_OPTIONS = [2000, 5000];
+let orderDeliveryManual = false;   // tarifa escrita a mano (domicilio por servicio externo)
+let orderDeliveryService = '';""")
+s = rep(s, """function selectDeliveryFee(v){
+  orderDeliveryFee = v;
+  renderOrderMainScreen();
+}""", """function selectDeliveryFee(v){
+  orderDeliveryFee = v;
+  orderDeliveryManual = false; orderDeliveryService = '';
+  renderOrderMainScreen();
+}
+function selectManualDeliveryFee(){
+  if(!can('ventas.domicilio_manual')) return;
+  if(!orderDeliveryManual){ orderDeliveryManual = true; orderDeliveryFee = 0; orderDeliveryService = ''; }
+  renderOrderMainScreen();
+  setTimeout(()=>{ const el = document.getElementById('orderDeliveryManualFee'); if(el) el.focus(); }, 0);
+}
+function onManualDeliveryInput(){
+  const el = document.getElementById('orderDeliveryManualFee');
+  orderDeliveryFee = Math.round(Number(String(el ? el.value : '').replace(/[^0-9]/g,'')) || 0);
+  const sv = document.getElementById('orderDeliveryService');
+  orderDeliveryService = sv ? sv.value.trim().slice(0,60) : '';
+  const er = document.getElementById('orderDeliveryErr'); if(er) er.textContent = '';
+  updateOrderTotalPreview();
+}""")
+s = rep(s, """    orderDeliveryFee = o ? (o.deliveryFee||0) : 0;
+  } else {
+    orderCart = [];
+    orderDeliveryFee = 0;
+  }""", """    orderDeliveryFee = o ? (o.deliveryFee||0) : 0;
+    orderDeliveryManual = !!(o && (o.deliveryService || (orderDeliveryFee>0 && !DELIVERY_FEE_OPTIONS.includes(orderDeliveryFee))));
+    orderDeliveryService = (o && o.deliveryService) || '';
+  } else {
+    orderCart = [];
+    orderDeliveryFee = 0;
+    orderDeliveryManual = false; orderDeliveryService = '';
+  }""")
+s = rep(s, """      <div class="prod-tile${!orderDeliveryFee?' prod-tile-selected':''}" onclick="selectDeliveryFee(0)">""",
+           """      <div class="prod-tile${!orderDeliveryFee && !orderDeliveryManual?' prod-tile-selected':''}" onclick="selectDeliveryFee(0)">""")
+s = rep(s, """        <div class="prod-tile${orderDeliveryFee===v?' prod-tile-selected':''}" onclick="selectDeliveryFee(${v})">""",
+           """        <div class="prod-tile${!orderDeliveryManual && orderDeliveryFee===v?' prod-tile-selected':''}" onclick="selectDeliveryFee(${v})">""")
+s = rep(s, """      `).join('')}
+    </div>
+    <label>Cliente (opcional""", """      `).join('')}
+      ${(can('ventas.domicilio_manual') || orderDeliveryManual) ? `
+        <div class="prod-tile${orderDeliveryManual?' prod-tile-selected':''}" onclick="selectManualDeliveryFee()">
+          <div style="width:48px;height:48px;border-radius:10px;background:var(--accent-soft);color:var(--accent);display:flex;align-items:center;justify-content:center;font-size:22px">✍️</div>
+          <div class="prod-tile-name">Otra tarifa<br>(externo)</div>
+        </div>` : ''}
+    </div>
+    ${orderDeliveryManual ? `
+      <div class="row" style="gap:10px;align-items:flex-end;flex-wrap:wrap">
+        <div style="flex:1;min-width:140px"><label>Tarifa del domicilio ($)</label>
+          <input id="orderDeliveryManualFee" type="text" inputmode="numeric" placeholder="Ej: 9000" value="${orderDeliveryFee||''}" oninput="onManualDeliveryInput()" ${can('ventas.domicilio_manual')?'':'readonly'}></div>
+        <div style="flex:1;min-width:140px"><label>Servicio (opcional)</label>
+          <input id="orderDeliveryService" type="text" maxlength="60" placeholder="Ej: Rappi, mensajería" value="${esc(orderDeliveryService)}" oninput="onManualDeliveryInput()" ${can('ventas.domicilio_manual')?'':'readonly'}></div>
+      </div>
+      <div id="orderDeliveryErr" class="item-meta" style="color:var(--bad)"></div>` : ''}
+    <label>Cliente (opcional""")
+s = rep(s, """  const deliveryFee = orderDeliveryFee||0;
+  const total = orderCart.reduce((s,l)=>s+l.price*l.qty,0) + deliveryFee;""",
+"""  const deliveryFee = orderDeliveryFee||0;
+  if(orderDeliveryManual && !(deliveryFee>0)){
+    const er = document.getElementById('orderDeliveryErr');
+    if(er) er.textContent = 'Escribe la tarifa del domicilio externo o elige otra opción.';
+    const el = document.getElementById('orderDeliveryManualFee'); if(el) el.focus();
+    return;
+  }
+  const deliveryService = orderDeliveryManual ? (orderDeliveryService || 'Servicio externo') : '';
+  const total = orderCart.reduce((s,l)=>s+l.price*l.qty,0) + deliveryFee;""")
+s = rep(s, "update({ items, total, deliveryFee });", "update({ items, total, deliveryFee, deliveryService });")
+s = rep(s, "proposedDeliveryFee: deliveryFee,", "proposedDeliveryFee: deliveryFee, proposedDeliveryService: deliveryService,")
+s = rep(s, "items, total, deliveryFee, status:'pendiente', createdAt: Date.now()", "items, total, deliveryFee, deliveryService, status:'pendiente', createdAt: Date.now()")
+s = rep(s, """  orderCart = [];
+  orderDeliveryFee = 0;
+  closeModal();""", """  orderCart = [];
+  orderDeliveryFee = 0;
+  orderDeliveryManual = false; orderDeliveryService = '';
+  closeModal();""")
+s = rep(s, "${o.deliveryFee? `<div class=\"item-meta\">🛵 Domicilio: ${fmt(o.deliveryFee)}</div>`:''}",
+           "${o.deliveryFee? `<div class=\"item-meta\">🛵 Domicilio: ${fmt(o.deliveryFee)}${o.deliveryService?' · '+esc(o.deliveryService):''}</div>`:''}")
+
 # Costo por unidad con decimales (los insumos se costean por gramo)
 s = rep(s, "Costo unit.: ${fmt(i.currentCost||0)}", "Costo: ${fmtCost(i.currentCost||0)} por ${i.unit}")
 
