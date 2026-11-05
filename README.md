@@ -26,6 +26,7 @@ App web instalable (PWA) para ventas, cocina, caja, inventario, costeo, clientes
 6. `supabase/06_permiso_analisis.sql` — permiso `analisis.ver` (pestaña Análisis: ventas vs compras, costo de lo vendido y márgenes; solo administrador).
 7. `supabase/07_domicilio_manual.sql` — tarifa de domicilio escrita a mano (servicio externo): permiso `ventas.domicilio_manual` (administrador y cajero/vendedor) y regla en la base de datos.
 8. `supabase/08_tipo_pedido_clientes.sql` — tipo de pedido (Domicilio / Mesa / Barra) y `upsert_customer`: en domicilio el cliente queda guardado por celular con nombre y dirección.
+9. `supabase/09_cocina.sql` — rol **cocina**, permisos `cocina.ver` / `cocina.operar`, lectura de pedidos recientes para cocina y `set_kitchen_stage` (preparación → horno → listo, con hora de cada paso). Volver a desplegar la función `invite-user` (acepta el rol cocina).
 
 Edge Function: `supabase/functions/invite-user/index.ts` (verificación JWT legacy desactivada; la función valida la sesión y el permiso `usuarios.gestionar`).
 
@@ -44,7 +45,7 @@ Registro libre desactivado: solo entran personas invitadas por el administrador.
 python3 -I src/build.py "<Tomates App original>.html" salida/
 ```
 
-`build.py` toma la app original y le agrega `src/adapter.js` (capa Supabase), `src/auth.js` (acceso y permisos), `src/history.js` (historial y análisis de costos), `src/analysis.js` (pestaña Análisis por día, semana y mes), `src/pwa.js`, `src/auth.css` y `src/brand.css`. Con `--mock` genera una versión de prueba con datos simulados (`src/mock.js`). Si cambia `sw.js`, subir su `VERSION`.
+`build.py` toma la app original y le agrega `src/adapter.js` (capa Supabase), `src/auth.js` (acceso y permisos), `src/history.js` (historial y análisis de costos), `src/analysis.js` (pestaña Análisis por día, semana y mes), `src/kitchen.js` (pantalla de cocina en vivo), `src/pwa.js`, `src/auth.css` y `src/brand.css`. Con `--mock` genera una versión de prueba con datos simulados (`src/mock.js`). Si cambia `sw.js`, subir su `VERSION`.
 
 ## Marca
 
