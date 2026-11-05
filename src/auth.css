@@ -17,3 +17,10 @@
   .perm-table th { font-size: 11.5px; color: var(--muted); font-weight: 600; text-align: center; position: sticky; top: 0; background: var(--card); }
   .perm-table tr.pm-mod td { font-weight: 700; background: var(--good-soft); font-size: 12px; }
   .perm-table input[type=checkbox] { width: 18px; height: 18px; }
+
+/* Tipo de pedido: Domicilio / Mesa / Barra */
+.ot-chips { display:flex; flex-wrap:wrap; gap:8px; margin:6px 0 4px; }
+button.ot-chip { width:auto; min-height:44px; padding:0 14px; border-radius:999px; border:1.5px solid var(--border);
+  background:var(--card); color:var(--fg); font-size:14px; font-weight:600; cursor:pointer; }
+button.ot-chip.on { background:var(--tm-red, #ff3035); border-color:var(--tm-red, #ff3035); color:#111111; font-weight:800; }
+.ot-cust { border:1px solid var(--border); border-radius:0.75rem; padding:12px; margin-top:12px; background:var(--card); }
