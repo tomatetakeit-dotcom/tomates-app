@@ -3642,6 +3642,7 @@ initDb();
   /* ---------- Gráfico de barras: ventas vs compras ---------- */
   function barChart(rows){
     if(!rows.length) return '';
+    if(!rows.some(r=>r.sales>0 || r.purchases>0)) return '<div class="item-meta" style="margin:10px 0">Aún no hay ventas entregadas ni compras registradas en este rango.</div>';
     const bw = 14, gap = 4, groupW = bw*2 + gap + 16, padL = 54, padB = 34, padT = 10, H = 190;
     const W = Math.max(320, padL + rows.length*groupW + 8);
     const max = Math.max(1, ...rows.map(r=>Math.max(r.sales, r.purchases)));
