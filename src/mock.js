@@ -5,13 +5,15 @@
     cajero: ['ventas.ver','ventas.crear','ventas.domicilio_manual','ventas.estado','ventas.cobrar','ventas.solicitar_cambio','domicilios.ver','domicilios.entregar','clientes.ver','clientes.editar'],
     asesor: ['ventas.ver','ventas.crear','ventas.solicitar_cambio','crm.ver','crm.responder','crm.estado','clientes.ver','clientes.editar'],
     domiciliario: ['domicilios.ver','domicilios.entregar','ventas.cobrar'],
+    cocina: ['cocina.ver','cocina.operar'],
   };
-  const ALL = [...new Set(Object.values(PERMS).flat().concat(['menu.gestionar','usuarios.gestionar','registros.eliminar','config.gestionar','analisis.ver']))];
+  const ALL = [...new Set(Object.values(PERMS).flat().concat(['menu.gestionar','usuarios.gestionar','registros.eliminar','config.gestionar','analisis.ver','cocina.ver','cocina.operar']))];
   const today = (()=>{ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); })();
   const T = window.__MOCK_TABLES__ = {
     profiles: [
       { id:'u-admin', email:'admin@test', name:'Admin Prueba', role:'admin', last_seen_at:'2026-01-01', created_at:'1' },
       { id:'u-caja', email:'caja@test', name:'Caja Prueba', role:'cajero', last_seen_at:'2026-01-01', created_at:'2' },
+      { id:'u-cocina', email:'cocina@test', name:'Cocina Prueba', role:'cocina', last_seen_at:'2026-01-01', created_at:'4' },
       { id:'u-nuevo', email:'nuevo@test', name:'Nuevo', role:'domiciliario', last_seen_at:null, created_at:'3' },
     ],
     ingredients: [ { id:'harina', data:{ name:'Harina', unit:'g', stock:5000, currentCost:5, minStock:1000 } },
@@ -98,6 +100,12 @@
       if(r){ Object.assign(r.data,{name:p_name,phone:d,address:p_address}); notify('customers','UPDATE',r); }
       else { r={id:'c'+Date.now(),data:{name:p_name,phone:d,address:p_address,notes:''},created_at:String(Date.now())}; T.customers.push(r); notify('customers','INSERT',r); }
       return r.id; },
+    set_kitchen_stage({p_order_id,p_stage}){ const r=T.orders.find(x=>x.id===p_order_id); const d=r.data, now=Date.now();
+      if(p_stage==='preparacion'){ d.kitchenStage='preparacion'; d.prepAt=d.prepAt||now; }
+      else if(p_stage==='horno'){ d.kitchenStage='horno'; d.prepAt=d.prepAt||now; d.ovenAt=now; }
+      else if(p_stage==='listo'){ d.kitchenStage='listo'; d.prepAt=d.prepAt||now; d.status='listo'; d.readyAt=now; }
+      else if(p_stage==='atras'){ if(d.status==='listo'){ d.status='pendiente'; delete d.readyAt; d.kitchenStage=d.ovenAt?'horno':'preparacion'; } else if(d.kitchenStage==='horno'){ d.kitchenStage='preparacion'; delete d.ovenAt; } else if(d.kitchenStage==='preparacion'){ delete d.kitchenStage; delete d.prepAt; } }
+      notify('orders','UPDATE',r); return d; },
     approve_edit_request({p_request_id}){ const q=T.edit_requests.find(x=>x.id===p_request_id); q.data.status='aprobada'; notify('edit_requests','UPDATE',q); return null; },
     register_purchase({p_data}){ const r={ id:'pu'+Date.now(), data:Object.assign({unitCost:p_data.totalCost/p_data.qty},p_data), created_at:String(Date.now()) }; T.purchases.push(r); notify('purchases','INSERT',r);
       const i=T.ingredients.find(x=>x.id===p_data.ingredientId); i.data.stock+=p_data.qty; i.data.currentCost=p_data.totalCost/p_data.qty; notify('ingredients','UPDATE',i); return r.id; },
