@@ -93,6 +93,11 @@
     touch_last_seen(){ const p=me(); p.last_seen_at = new Date().toISOString(); return null; },
     merge_doc({p_table,p_id,p_patch}){ const r=T[p_table].find(x=>x.id===p_id); if(!r) throw {message:'No tienes permiso o el registro no existe', code:'42501'}; Object.assign(r.data,p_patch); notify(p_table,'UPDATE',r); return null; },
     set_order_status({p_order_id,p_status}){ const r=T.orders.find(x=>x.id===p_order_id); r.data.status=p_status; if(p_status==='listo') r.data.readyAt=Date.now(); if(p_status==='entregado') r.data.deliveredAt=Date.now(); notify('orders','UPDATE',r); return r.data; },
+    upsert_customer({p_phone,p_name,p_address}){ let d=String(p_phone||'').replace(/\D/g,''); if(d.length===10) d='57'+d; if(!(d.length===12&&d.startsWith('57'))) throw {message:'Celular inválido: deben ser 10 dígitos'};
+      const k=d.slice(-10); let r=T.customers.find(x=>String(x.data.phone||'').replace(/\D/g,'').slice(-10)===k);
+      if(r){ Object.assign(r.data,{name:p_name,phone:d,address:p_address}); notify('customers','UPDATE',r); }
+      else { r={id:'c'+Date.now(),data:{name:p_name,phone:d,address:p_address,notes:''},created_at:String(Date.now())}; T.customers.push(r); notify('customers','INSERT',r); }
+      return r.id; },
     approve_edit_request({p_request_id}){ const q=T.edit_requests.find(x=>x.id===p_request_id); q.data.status='aprobada'; notify('edit_requests','UPDATE',q); return null; },
     register_purchase({p_data}){ const r={ id:'pu'+Date.now(), data:Object.assign({unitCost:p_data.totalCost/p_data.qty},p_data), created_at:String(Date.now()) }; T.purchases.push(r); notify('purchases','INSERT',r);
       const i=T.ingredients.find(x=>x.id===p_data.ingredientId); i.data.stock+=p_data.qty; i.data.currentCost=p_data.totalCost/p_data.qty; notify('ingredients','UPDATE',i); return r.id; },
