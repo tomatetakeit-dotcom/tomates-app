@@ -21,6 +21,11 @@
     categories: [], purchases: [], expenses: [], pending_expenses: [], counts: [], customers: [ { id:'c1', data:{ name:'Ana', phone:'3001112233', notes:'' } } ],
     edit_requests: [], cash_register: [], cash_movements: [], config: [],
     orders: [ { id:'o1', data:{ date: today, status:'pendiente', total:32000, deliveryFee:0, createdAt: Date.now()-600000, items:[{productId:'p1',name:'Muzzarella',qty:1,price:32000}], customerName:'Ana' } } ],
+    ingredient_cost_history: [
+      { id:'h1', ingredient_id:'harina', cost:4, previous_cost:null, source:'inicial', effective_date:'2026-09-01', note:'Costo inicial', changed_by:null, created_at:'2026-09-01T10:00:00Z' },
+      { id:'h2', ingredient_id:'harina', cost:4.4, previous_cost:4, source:'compra', effective_date:'2026-10-05', note:'Molino Z', changed_by:'u-admin', created_at:'2026-10-05T10:00:00Z' },
+      { id:'h3', ingredient_id:'harina', cost:5, previous_cost:4.4, source:'manual', effective_date:'2026-10-28', note:'Alza proveedor', changed_by:'u-admin', created_at:'2026-10-28T10:00:00Z' },
+      { id:'h4', ingredient_id:'queso', cost:20, previous_cost:null, source:'inicial', effective_date:'2026-09-01', note:'Costo inicial', changed_by:null, created_at:'2026-09-01T10:00:00Z' } ],
     invitations: [ { email:'nuevo@test', name:'Nuevo', phone:'', role:'domiciliario', accepted_at:null, created_at:'3' } ],
     permissions: ALL.map((k,i)=>({ key:k, module:k.split('.')[0], label:k, sort:i })),
     role_permissions: Object.entries(PERMS).flatMap(([r,ps])=>ps.map(p=>({ role:r, permission:p }))),
@@ -44,6 +49,7 @@
       eq(k,v){ filters.push(r=>r[k]===v); return b; },
       in(k,vs){ filters.push(r=>vs.includes(r[k])); return b; },
       range(a,z){ rng=[a,z]; return b; },
+      limit(){ return b; },
       maybeSingle(){ single='maybe'; return b; }, single(){ single='one'; return b; },
       insert(obj){ op='insert'; payload=obj; return b; },
       upsert(obj){ op='upsert'; payload=obj; return b; },
@@ -88,6 +94,9 @@
       const i=T.ingredients.find(x=>x.id===p_data.ingredientId); i.data.stock+=p_data.qty; i.data.currentCost=p_data.totalCost/p_data.qty; notify('ingredients','UPDATE',i); return r.id; },
     register_count({p_ingredient_id,p_counted}){ const i=T.ingredients.find(x=>x.id===p_ingredient_id); const c={id:'cn'+Date.now(),data:{ingredientId:i.id,counted:p_counted,theoretical:i.data.stock,difference:p_counted-i.data.stock,date:today},created_at:String(Date.now())}; T.counts.push(c); i.data.stock=p_counted; notify('counts','INSERT',c); notify('ingredients','UPDATE',i); return c.data; },
     delete_purchase({p_purchase_id}){ const p=T.purchases.find(x=>x.id===p_purchase_id); const i=T.ingredients.find(x=>x.id===p.data.ingredientId); i.data.stock-=p.data.qty; T.purchases=T.purchases.filter(x=>x!==p); notify('purchases','DELETE',null,p); notify('ingredients','UPDATE',i); return null; },
+    set_ingredient_cost({p_ingredient_id,p_cost,p_date,p_note}){ const i=T.ingredients.find(x=>x.id===p_ingredient_id); const prev=i.data.currentCost; i.data.currentCost=p_cost;
+      const h={id:'h'+Date.now(),ingredient_id:i.id,cost:p_cost,previous_cost:prev,source:'manual',effective_date:p_date,note:p_note,changed_by:session.user.id,created_at:new Date().toISOString()};
+      T.ingredient_cost_history.push(h); notify('ingredients','UPDATE',i); notify('ingredient_cost_history','INSERT',h); return null; },
     set_user_role({p_user,p_role}){ const p=T.profiles.find(x=>x.id===p_user); p.role=p_role; notify('profiles','UPDATE',p); return null; },
   };
 
