@@ -25,6 +25,7 @@ App web instalable (PWA) para ventas, cocina, caja, inventario, costeo, clientes
 5. `supabase/05_historial_costos.sql` — historial de costos de insumos: cada cambio (inicial, compra o manual) queda guardado con fecha, origen y usuario.
 6. `supabase/06_permiso_analisis.sql` — permiso `analisis.ver` (pestaña Análisis: ventas vs compras, costo de lo vendido y márgenes; solo administrador).
 7. `supabase/07_domicilio_manual.sql` — tarifa de domicilio escrita a mano (servicio externo): permiso `ventas.domicilio_manual` (administrador y cajero/vendedor) y regla en la base de datos.
+8. `supabase/08_tipo_pedido_clientes.sql` — tipo de pedido (Domicilio / Mesa / Barra) y `upsert_customer`: en domicilio el cliente queda guardado por celular con nombre y dirección.
 
 Edge Function: `supabase/functions/invite-user/index.ts` (verificación JWT legacy desactivada; la función valida la sesión y el permiso `usuarios.gestionar`).
 
