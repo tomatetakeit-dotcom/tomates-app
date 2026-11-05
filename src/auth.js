@@ -141,7 +141,7 @@
   const TAB_PERMS = {
     pedidos:['ventas.ver','domicilios.ver'], menu:['menu.gestionar','menu.ver_costos'], recetas:['menu.ver_costos'],
     inventario:['inventario.ver'], compras:['compras.gestionar'], gastos:['gastos.gestionar'], caja:['caja.ver'],
-    clientes:['clientes.ver'], informes:['informes.ver'], usuarios:['usuarios.gestionar']
+    clientes:['clientes.ver'], informes:['informes.ver'], analisis:['analisis.ver'], usuarios:['usuarios.gestionar']
   };
   const TOP_PERMS = { pedidos:'ventas.crear', menu:'menu.gestionar', recetas:'menu.gestionar', inventario:'menu.gestionar',
                       compras:'compras.gestionar', gastos:'gastos.gestionar', clientes:'clientes.editar' };
