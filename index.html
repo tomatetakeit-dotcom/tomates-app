@@ -1031,7 +1031,7 @@ function renderOrders(){
       </div>
       <div class="item-meta">#${(o.id||'').slice(0,5)} · ${fmtOrderDateTime(o)}</div>
       <div class="item-meta" style="margin-top:6px;color:var(--fg)">${itemsTxt}</div>
-      ${o.deliveryFee? `<div class="item-meta">🛵 Domicilio: ${fmt(o.deliveryFee)}</div>`:''}
+      ${o.deliveryFee? `<div class="item-meta">🛵 Domicilio: ${fmt(o.deliveryFee)}${o.deliveryService?' · '+esc(o.deliveryService):''}</div>`:''}
       ${timeline}
       <div class="row" style="margin-top:8px">
         <div class="item-name" style="font-size:15px">${fmt(o.total)}</div>
@@ -1132,7 +1132,9 @@ let orderCart = [];
 let editingOrderId = null;
 let orderCategoryFilter = null; // null = mostrando categorías; string = categoría elegida
 let orderDeliveryFee = 0;
-const DELIVERY_FEE_OPTIONS = [2000, 5000, 7000];
+const DELIVERY_FEE_OPTIONS = [2000, 5000];
+let orderDeliveryManual = false;   // tarifa escrita a mano (domicilio por servicio externo)
+let orderDeliveryService = '';
 
 function productImageSrc(p){
   if(p.imageDataUrl) return p.imageDataUrl;
@@ -1174,9 +1176,12 @@ function openOrderModal(orderId){
       : { key: uid(), type:'entera', productId:it.productId, name:it.name, price:it.price, qty:it.qty }
     ) : [];
     orderDeliveryFee = o ? (o.deliveryFee||0) : 0;
+    orderDeliveryManual = !!(o && (o.deliveryService || (orderDeliveryFee>0 && !DELIVERY_FEE_OPTIONS.includes(orderDeliveryFee))));
+    orderDeliveryService = (o && o.deliveryService) || '';
   } else {
     orderCart = [];
     orderDeliveryFee = 0;
+    orderDeliveryManual = false; orderDeliveryService = '';
   }
   renderOrderMainScreen();
   modalBg.classList.add('open');
@@ -1189,7 +1194,22 @@ function selectOrderCategory(cat){
 
 function selectDeliveryFee(v){
   orderDeliveryFee = v;
+  orderDeliveryManual = false; orderDeliveryService = '';
   renderOrderMainScreen();
+}
+function selectManualDeliveryFee(){
+  if(!can('ventas.domicilio_manual')) return;
+  if(!orderDeliveryManual){ orderDeliveryManual = true; orderDeliveryFee = 0; orderDeliveryService = ''; }
+  renderOrderMainScreen();
+  setTimeout(()=>{ const el = document.getElementById('orderDeliveryManualFee'); if(el) el.focus(); }, 0);
+}
+function onManualDeliveryInput(){
+  const el = document.getElementById('orderDeliveryManualFee');
+  orderDeliveryFee = Math.round(Number(String(el ? el.value : '').replace(/[^0-9]/g,'')) || 0);
+  const sv = document.getElementById('orderDeliveryService');
+  orderDeliveryService = sv ? sv.value.trim().slice(0,60) : '';
+  const er = document.getElementById('orderDeliveryErr'); if(er) er.textContent = '';
+  updateOrderTotalPreview();
 }
 
 function updateOrderTotalPreview(){
@@ -1253,17 +1273,30 @@ function renderOrderMainScreen(){
     <div id="cartWrap">${cartHtml}</div>
     <label>Domicilio (opcional, se paga en su totalidad al domiciliario)</label>
     <div class="prod-grid" style="grid-template-columns:repeat(4,1fr)">
-      <div class="prod-tile${!orderDeliveryFee?' prod-tile-selected':''}" onclick="selectDeliveryFee(0)">
+      <div class="prod-tile${!orderDeliveryFee && !orderDeliveryManual?' prod-tile-selected':''}" onclick="selectDeliveryFee(0)">
         <div style="width:48px;height:48px;border-radius:10px;background:var(--bg);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:20px">🚫</div>
         <div class="prod-tile-name">Sin<br>domicilio</div>
       </div>
       ${DELIVERY_FEE_OPTIONS.map(v=>`
-        <div class="prod-tile${orderDeliveryFee===v?' prod-tile-selected':''}" onclick="selectDeliveryFee(${v})">
+        <div class="prod-tile${!orderDeliveryManual && orderDeliveryFee===v?' prod-tile-selected':''}" onclick="selectDeliveryFee(${v})">
           <div style="width:48px;height:48px;border-radius:10px;background:var(--accent-soft);color:var(--accent);display:flex;align-items:center;justify-content:center;font-size:22px">🛵</div>
           <div class="prod-tile-name">${fmt(v)}</div>
         </div>
       `).join('')}
+      ${(can('ventas.domicilio_manual') || orderDeliveryManual) ? `
+        <div class="prod-tile${orderDeliveryManual?' prod-tile-selected':''}" onclick="selectManualDeliveryFee()">
+          <div style="width:48px;height:48px;border-radius:10px;background:var(--accent-soft);color:var(--accent);display:flex;align-items:center;justify-content:center;font-size:22px">✍️</div>
+          <div class="prod-tile-name">Otra tarifa<br>(externo)</div>
+        </div>` : ''}
     </div>
+    ${orderDeliveryManual ? `
+      <div class="row" style="gap:10px;align-items:flex-end;flex-wrap:wrap">
+        <div style="flex:1;min-width:140px"><label>Tarifa del domicilio ($)</label>
+          <input id="orderDeliveryManualFee" type="text" inputmode="numeric" placeholder="Ej: 9000" value="${orderDeliveryFee||''}" oninput="onManualDeliveryInput()" ${can('ventas.domicilio_manual')?'':'readonly'}></div>
+        <div style="flex:1;min-width:140px"><label>Servicio (opcional)</label>
+          <input id="orderDeliveryService" type="text" maxlength="60" placeholder="Ej: Rappi, mensajería" value="${esc(orderDeliveryService)}" oninput="onManualDeliveryInput()" ${can('ventas.domicilio_manual')?'':'readonly'}></div>
+      </div>
+      <div id="orderDeliveryErr" class="item-meta" style="color:var(--bad)"></div>` : ''}
     <label>Cliente (opcional, para enviar el pedido por WhatsApp)</label>
     <select id="orderCustomer" onchange="toggleNewCustomerFields()">
       <option value="">— sin cliente —</option>
@@ -1379,15 +1412,22 @@ async function saveOrder(){
     : { productId:l.productId, name:l.name, qty:l.qty, price:l.price }
   );
   const deliveryFee = orderDeliveryFee||0;
+  if(orderDeliveryManual && !(deliveryFee>0)){
+    const er = document.getElementById('orderDeliveryErr');
+    if(er) er.textContent = 'Escribe la tarifa del domicilio externo o elige otra opción.';
+    const el = document.getElementById('orderDeliveryManualFee'); if(el) el.focus();
+    return;
+  }
+  const deliveryService = orderDeliveryManual ? (orderDeliveryService || 'Servicio externo') : '';
   const total = orderCart.reduce((s,l)=>s+l.price*l.qty,0) + deliveryFee;
 
   if(editingOrderId){
     if(can('ventas.editar')){
-      await db.collection('orders').doc(editingOrderId).update({ items, total, deliveryFee });
+      await db.collection('orders').doc(editingOrderId).update({ items, total, deliveryFee, deliveryService });
     } else {
       const mine = state.roles.find(r=>r.id===myUid);
       await db.collection('editRequests').add({
-        orderId: editingOrderId, proposedItems: items, proposedTotal: total, proposedDeliveryFee: deliveryFee,
+        orderId: editingOrderId, proposedItems: items, proposedTotal: total, proposedDeliveryFee: deliveryFee, proposedDeliveryService: deliveryService,
         requestedBy: myUid, requestedByName: (mine&&mine.name)||'Cajero',
         status:'pendiente', createdAt: Date.now(),
       });
@@ -1411,9 +1451,10 @@ async function saveOrder(){
     const c = state.customers.find(x=>x.id===custSel.value);
     if(c){ customerId = c.id; customerName = c.name; customerPhone = c.phone||''; }
   }
-  await db.collection('orders').add({ date: todayStr(), items, total, deliveryFee, status:'pendiente', createdAt: Date.now(), customerId, customerName, customerPhone });
+  await db.collection('orders').add({ date: todayStr(), items, total, deliveryFee, deliveryService, status:'pendiente', createdAt: Date.now(), customerId, customerName, customerPhone });
   orderCart = [];
   orderDeliveryFee = 0;
+  orderDeliveryManual = false; orderDeliveryService = '';
   closeModal();
 }
 
