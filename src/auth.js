@@ -4,8 +4,8 @@
 ===================================================================== */
 (function(){
   const TOM = window.TOM; const sb = TOM.sb;
-  const ROLE_LABEL = { admin:'Administrador', supervisor:'Supervisor', cajero:'Cajero', asesor:'Asesor WhatsApp',
-                       domiciliario:'Domiciliario', pendiente:'Pendiente', inactivo:'Inactivo' };
+  const ROLE_LABEL = { admin:'Administrador', supervisor:'Supervisor', cajero:'Vendedor (mostrador)', asesor:'Asesor WhatsApp',
+                       domiciliario:'Domiciliario', cocina:'Cocina', pendiente:'Pendiente', inactivo:'Inactivo' };
   window.ROLE_LABEL = ROLE_LABEL;
   const $ = (s)=>document.querySelector(s);
   const escH = (s)=>String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -139,7 +139,7 @@
 
   /* ---------------- Permisos: qué pestañas ve cada rol ---------------- */
   const TAB_PERMS = {
-    pedidos:['ventas.ver','domicilios.ver'], menu:['menu.gestionar','menu.ver_costos'], recetas:['menu.ver_costos'],
+    pedidos:['ventas.ver','domicilios.ver'], cocina:['cocina.ver'], menu:['menu.gestionar','menu.ver_costos'], recetas:['menu.ver_costos'],
     inventario:['inventario.ver'], compras:['compras.gestionar'], gastos:['gastos.gestionar'], caja:['caja.ver'],
     clientes:['clientes.ver'], informes:['informes.ver'], analisis:['analisis.ver'], usuarios:['usuarios.gestionar']
   };
@@ -245,7 +245,7 @@
   };
 
   /* ---------------- Usuarios: invitar, cambiar rol, desactivar ---------------- */
-  const ASSIGNABLE = ['supervisor','cajero','asesor','domiciliario'];
+  const ASSIGNABLE = ['supervisor','cajero','asesor','domiciliario','cocina'];
   let invitesCache = [];
   async function loadInvites(){
     if(!TOM.can('usuarios.gestionar')) return;
