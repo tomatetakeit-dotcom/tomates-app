@@ -6,7 +6,7 @@
     asesor: ['ventas.ver','ventas.crear','ventas.solicitar_cambio','crm.ver','crm.responder','crm.estado','clientes.ver','clientes.editar'],
     domiciliario: ['domicilios.ver','domicilios.entregar','ventas.cobrar'],
   };
-  const ALL = [...new Set(Object.values(PERMS).flat().concat(['menu.gestionar','usuarios.gestionar','registros.eliminar','config.gestionar']))];
+  const ALL = [...new Set(Object.values(PERMS).flat().concat(['menu.gestionar','usuarios.gestionar','registros.eliminar','config.gestionar','analisis.ver']))];
   const today = (()=>{ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); })();
   const T = window.__MOCK_TABLES__ = {
     profiles: [
@@ -18,9 +18,13 @@
                    { id:'queso', data:{ name:'Queso', unit:'g', stock:3000, currentCost:20 } } ],
     recipes: [ { id:'r1', data:{ name:'Pizza muzza', yieldQty:1, items:[{ingredientId:'harina',qty:250},{ingredientId:'queso',qty:150}] } } ],
     products: [ { id:'p1', data:{ name:'Muzzarella', category:'Pizzas', price:32000, recipeId:'r1' } } ],
-    categories: [], purchases: [], expenses: [], pending_expenses: [], counts: [], customers: [ { id:'c1', data:{ name:'Ana', phone:'3001112233', notes:'' } } ],
+    categories: [], expenses: [], pending_expenses: [], counts: [], customers: [ { id:'c1', data:{ name:'Ana', phone:'3001112233', notes:'' } } ],
     edit_requests: [], cash_register: [], cash_movements: [], config: [],
-    orders: [ { id:'o1', data:{ date: today, status:'pendiente', total:32000, deliveryFee:0, createdAt: Date.now()-600000, items:[{productId:'p1',name:'Muzzarella',qty:1,price:32000}], customerName:'Ana' } } ],
+    purchases: [ { id:'pu1', data:{ ingredientId:'harina', ingredientName:'Harina', qty:5000, totalCost:22000, unitCost:4.4, date:'2026-10-05', provider:'Molino Z' } },
+                 { id:'pu2', data:{ ingredientId:'queso', ingredientName:'Queso', qty:2000, totalCost:40000, unitCost:20, date:'2026-10-20' } },
+                 { id:'pu3', data:{ ingredientId:'harina', ingredientName:'Harina', qty:2000, totalCost:10000, unitCost:5, date:'2026-11-02' } } ],
+    orders: [ { id:'o0', data:{ date:'2026-10-21', status:'entregado', total:64000, deliveryFee:0, items:[{productId:'p1',name:'Muzzarella',qty:2,price:32000}] } },
+              { id:'o00', data:{ date:'2026-11-03', status:'entregado', total:37000, deliveryFee:5000, items:[{type:'mitad',qty:1,price:32000,flavorAId:'p1',flavorBId:'p1'}] } }, { id:'o1', data:{ date: today, status:'pendiente', total:32000, deliveryFee:0, createdAt: Date.now()-600000, items:[{productId:'p1',name:'Muzzarella',qty:1,price:32000}], customerName:'Ana' } } ],
     ingredient_cost_history: [
       { id:'h1', ingredient_id:'harina', cost:4, previous_cost:null, source:'inicial', effective_date:'2026-09-01', note:'Costo inicial', changed_by:null, created_at:'2026-09-01T10:00:00Z' },
       { id:'h2', ingredient_id:'harina', cost:4.4, previous_cost:4, source:'compra', effective_date:'2026-10-05', note:'Molino Z', changed_by:'u-admin', created_at:'2026-10-05T10:00:00Z' },
