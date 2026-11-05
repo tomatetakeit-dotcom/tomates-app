@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Tomates App</title>
+<title>Tomates Pizzería</title>
 <style>
   :root {
     --bg: #ffffff;
@@ -211,6 +211,14 @@
   .toast { pointer-events:auto; margin-bottom:8px; padding:12px 14px; border-radius:12px; font-size:13.5px; font-weight:600; box-shadow:0 4px 14px rgba(0,0,0,0.3); background:var(--accent); color:#ffffff; }
   .toast.ok { background:var(--fg); color:var(--bg); }
 </style>
+<meta name="theme-color" content="#FF3035">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="48x48" href="brand/icons/favicon-48.png">
+<link rel="apple-touch-icon" href="brand/icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-title" content="Tomates">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&display=swap">
 <style>
   #authGate { position: fixed; inset: 0; z-index: 200; background: var(--bg); display: flex; align-items: center; justify-content: center;
     padding: max(16px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) max(16px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); overflow-y: auto; }
@@ -232,6 +240,113 @@
   .perm-table tr.pm-mod td { font-weight: 700; background: var(--good-soft); font-size: 12px; }
   .perm-table input[type=checkbox] { width: 18px; height: 18px; }
 
+  /* ==================================================================
+     Identidad Tomates Pizzería (guía web/PWA 1.0) — se carga después
+     de los estilos originales y solo redefine tokens y componentes.
+     Rojo #FF3035 · Blanco #FFFFFF · Negro #111111. El rojo nunca lleva
+     texto blanco pequeño; el texto rojo pequeño solo va sobre fondo oscuro.
+  ================================================================== */
+  :root {
+    --tm-red: #ff3035; --tm-white: #ffffff; --tm-black: #111111;
+    --tm-font-display: Impact, "Haettenschweiler", "Anton", "Arial Narrow Bold", "Arial Narrow", Arial, sans-serif; /* Anton (OFL) solo donde no hay Impact */
+    --tm-font-body: Arial, Helvetica, sans-serif;
+    --tm-target-min: 3rem;
+    --tm-control-border: #767676;
+    --tm-red-ink: var(--tm-black);       /* texto que acompaña marcas rojas en fondo claro */
+    --bg: #ffffff; --fg: #111111; --muted: #555555; --card: #ffffff; --border: #d5d5d5;
+    --accent: var(--tm-red); --accent-fg: var(--tm-black); --accent-soft: #ffe1e2;
+    --good: #111111; --good-soft: #f2f2f2;
+    --bad: var(--tm-red); --bad-soft: #ffe1e2; --warn: var(--tm-red); --warn-soft: #ffe1e2;
+    --shadow: none;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #111111; --fg: #ffffff; --muted: #bdbdbd; --card: #1c1c1c; --border: #3a3a3a;
+      --tm-control-border: #8a8a8a; --tm-red-ink: var(--tm-red);
+      --accent-soft: #3a1416; --good: #ffffff; --good-soft: #2a2a2a; --bad-soft: #3a1416; --warn-soft: #3a1416;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #111111; --fg: #ffffff; --muted: #bdbdbd; --card: #1c1c1c; --border: #3a3a3a;
+    --tm-control-border: #8a8a8a; --tm-red-ink: var(--tm-red);
+    --accent-soft: #3a1416; --good: #ffffff; --good-soft: #2a2a2a; --bad-soft: #3a1416; --warn-soft: #3a1416;
+    color-scheme: dark;
+  }
+
+  body { font-family: var(--tm-font-body); font-size: 16px; line-height: 1.45; padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px)); }
+
+  /* Encabezado: nombre del negocio como texto (el logo completo va en el acceso) */
+  header .logo { display: none; }
+  header h1 { font-family: var(--tm-font-display); font-weight: 400; font-size: 24px; letter-spacing: .02em; text-transform: uppercase; line-height: 1.05; }
+  header .sub { font-size: 13px; }
+  .top-sticky { border-bottom: 2px solid var(--tm-black); }
+  :root[data-theme="dark"] .top-sticky { border-bottom-color: var(--tm-red); }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .top-sticky { border-bottom-color: var(--tm-red); } }
+
+  h2.section-title { font-family: var(--tm-font-display); font-weight: 400; font-size: 26px; letter-spacing: .02em; text-transform: uppercase; line-height: 1.05; margin: 6px 0 14px; }
+  .modal h3, .auth-card h2 { font-family: var(--tm-font-display); font-weight: 400; font-size: 24px; letter-spacing: .02em; text-transform: uppercase; }
+
+  /* Botones: rojo con texto negro y borde negro; secundario blanco/negro */
+  button.primary, .top-action button.big-action {
+    background: var(--tm-red); color: var(--tm-black); border: 2px solid var(--tm-black);
+    border-radius: 0.375rem; min-height: var(--tm-target-min); font-weight: 700; box-shadow: none;
+  }
+  .top-action button.big-action { font-size: 18px; border-radius: 0.5rem; }
+  button.primary:disabled { background: var(--good-soft); color: var(--muted); border-style: dashed; cursor: not-allowed; }
+  button.secondary {
+    background: var(--card); color: var(--fg); border: 2px solid var(--fg);
+    border-radius: 0.375rem; min-height: var(--tm-target-min); font-weight: 700; font-size: 14px;
+  }
+  button.ghost { color: var(--fg); min-height: 40px; padding: 8px 6px; font-size: 13.5px; }
+  .fab { background: var(--tm-red); color: var(--tm-black); border: 2px solid var(--tm-black); }
+
+  /* Campos */
+  label { font-size: 13.5px; color: var(--fg); }
+  input, select, textarea { min-height: var(--tm-target-min); font-size: 16px; border: 1px solid var(--tm-control-border); border-radius: 0.375rem; padding: 10px 12px; }
+  textarea { min-height: 96px; }
+  input[type=checkbox], input[type=radio] { min-height: 0; width: 20px; height: 20px; accent-color: var(--tm-red); }
+
+  /* Estados: marca roja + texto legible, nunca solo color */
+  .pill { font-size: 12px; padding: 3px 9px; border: 1.5px solid transparent; }
+  .pill.accent { background: var(--tm-red); color: var(--tm-black); border-color: var(--tm-black); }
+  .pill.bad, .pill.warn { background: var(--bad-soft); color: var(--fg); border-color: var(--tm-red); }
+  .pill.good { background: var(--good-soft); color: var(--fg); border-color: var(--border); }
+  .banner { background: var(--warn-soft); color: var(--fg); border-left: 4px solid var(--tm-red); border-radius: 0.375rem; font-size: 14px; }
+  .prod-tile-price { color: var(--fg); }
+  .prod-tile-selected { border-color: var(--tm-red); }
+  .segmented button { min-height: 40px; font-size: 14px; }
+  .segmented button.active { background: var(--tm-red); color: var(--tm-black); }
+  .card { border-radius: 0.75rem; }
+  .kpi .v { font-size: 21px; }
+  .item-meta { font-size: 13px; }
+  .item-name { font-size: 15.5px; }
+
+  /* Barra inferior: destino actual con texto y barra roja */
+  nav.tabbar { border-top: 2px solid var(--tm-black); padding-bottom: env(safe-area-inset-bottom, 0px); }
+  nav.tabbar button { min-height: 56px; min-width: 72px; font-size: 12px; color: var(--muted); position: relative; }
+  nav.tabbar button.active { color: var(--fg); font-weight: 700; }
+  nav.tabbar button.active::before { content: ""; position: absolute; top: 0; left: 18%; right: 18%; height: 4px; background: var(--tm-red); border-radius: 0 0 3px 3px; }
+
+  /* Foco visible */
+  :focus-visible { outline: 3px solid var(--tm-white); outline-offset: 2px; box-shadow: 0 0 0 6px var(--tm-black); }
+
+  /* Acceso */
+  .auth-card { border: 2px solid var(--tm-black); box-shadow: none; text-align: left; }
+  .auth-logo { height: auto; width: 200px; max-width: 100%; aspect-ratio: 1 / 1; border-radius: 0.75rem; margin: 0 auto 8px; display: block; }
+  .auth-msg { background: var(--warn-soft); border-left: 4px solid var(--tm-red); color: var(--fg); }
+  #userChip .uc-out { min-height: 40px; }
+
+  /* Avisos de la app instalada */
+  .net-banner { position: sticky; top: 0; z-index: 6; background: var(--tm-black); color: var(--tm-white); font-size: 14px; padding: 10px max(16px, env(safe-area-inset-left, 0px)); border-bottom: 3px solid var(--tm-red); }
+  .net-banner[hidden] { display: none; }
+  .update-bar { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(70px + env(safe-area-inset-bottom, 0px)); z-index: 30; width: min(92%, 440px);
+    background: var(--card); color: var(--fg); border: 2px solid var(--tm-black); border-radius: 0.75rem; padding: 10px 12px; display: flex; gap: 10px; align-items: center; justify-content: space-between; font-size: 14px; }
+  .update-bar[hidden] { display: none; }
+  .update-bar button.primary { width: auto; padding: 8px 14px; }
+
+  @media (prefers-reduced-motion: reduce) { .tab.active { animation: none; } }
+
 </style>
 </head>
 <body>
@@ -242,7 +357,7 @@
     <img src="data:image/png;base64,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" alt="Tomates App" style="height:42px;width:auto;display:block;border-radius:8px">
   </div>
   <div>
-    <h1>Tomates App</h1>
+    <h1>Tomates Pizzería</h1>
     <div class="sub" id="dbStatus">Conectando…</div>
   </div>
 </header>
@@ -3436,12 +3551,12 @@ initDb();
   gate.innerHTML = `<div class="auth-card"><div id="authBody"><div class="item-meta">Cargando…</div></div></div>`;
   document.body.appendChild(gate);
   const body = ()=>$('#authBody');
-  const logo = ()=>{ const img = document.querySelector('header .logo img'); return img ? `<img src="${img.src}" alt="" class="auth-logo">` : ''; };
+  const logo = ()=> `<img src="brand/logo/tomates-logo-440.webp" width="200" height="200" alt="Tomates Pizzería" class="auth-logo">`;
 
   function showLogin(msg){
     gate.hidden = false;
     body().innerHTML = `${logo()}
-      <h2>Tomates App</h2>
+      <h2>Hoy se come pizza.</h2>
       <p class="item-meta">Ingresa con el correo y la contraseña de tu invitación.</p>
       ${msg ? `<div class="auth-msg">${escH(msg)}</div>` : ''}
       <form id="loginForm" autocomplete="on">
@@ -3815,6 +3930,52 @@ initDb();
 
   // Estado de conexión
   TOM.whenReady.then(()=>{ const s = document.getElementById('dbStatus'); if(s) s.textContent = 'Conectado'; });
+})();
+
+</script>
+<script>
+/* =====================================================================
+   Tomates — app instalable (PWA): service worker, aviso de nueva versión
+   y aviso de conexión. No guarda datos del negocio en el teléfono.
+===================================================================== */
+(function(){
+  // Aviso de conexión
+  const net = document.createElement('div');
+  net.className = 'net-banner'; net.setAttribute('role','status'); net.hidden = navigator.onLine !== false;
+  net.textContent = 'Estás sin conexión. Lo que hagas no se guardará hasta que vuelva el internet.';
+  document.body.insertBefore(net, document.body.firstChild);
+  addEventListener('offline', ()=>{ net.hidden = false; });
+  addEventListener('online', ()=>{ net.hidden = true; });
+
+  if(!('serviceWorker' in navigator) || location.protocol !== 'https:') return;
+
+  // Aviso de nueva versión: nunca recarga sola en medio de un pedido
+  const bar = document.createElement('div');
+  bar.className = 'update-bar'; bar.hidden = true; bar.setAttribute('role','status');
+  bar.innerHTML = '<span>Hay una nueva versión.</span><button class="primary" type="button">Actualizar</button>';
+  document.body.appendChild(bar);
+  let waiting = null, reloading = false;
+  bar.querySelector('button').addEventListener('click', ()=>{
+    const modalOpen = document.querySelector('.modal-bg.open');
+    if(modalOpen && !confirmSafe()) return;
+    if(waiting) waiting.postMessage('SKIP_WAITING');
+  });
+  function confirmSafe(){ if(typeof toast==='function') toast('Termina o cierra la ventana abierta antes de actualizar.'); return false; }
+  const offer = (w)=>{ waiting = w; bar.hidden = false; };
+  navigator.serviceWorker.addEventListener('controllerchange', ()=>{ if(reloading) return; reloading = true; location.reload(); });
+
+  addEventListener('load', async ()=>{
+    try{
+      const reg = await navigator.serviceWorker.register('sw.js', { scope: './' });
+      if(reg.waiting && navigator.serviceWorker.controller) offer(reg.waiting);
+      reg.addEventListener('updatefound', ()=>{
+        const nw = reg.installing; if(!nw) return;
+        nw.addEventListener('statechange', ()=>{ if(nw.state==='installed' && navigator.serviceWorker.controller) offer(nw); });
+      });
+      // Revisa si hay versión nueva cada vez que la app vuelve a primer plano
+      document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='visible') reg.update().catch(()=>{}); });
+    }catch(e){ /* sin service worker la app sigue funcionando en línea */ }
+  });
 })();
 
 </script>
