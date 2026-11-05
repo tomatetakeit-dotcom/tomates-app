@@ -247,6 +247,40 @@ button.ot-chip { width:auto; min-height:44px; padding:0 14px; border-radius:999p
 button.ot-chip.on { background:var(--tm-red, #ff3035); border-color:var(--tm-red, #ff3035); color:#111111; font-weight:800; }
 .ot-cust { border:1px solid var(--border); border-radius:0.75rem; padding:12px; margin-top:12px; background:var(--card); }
 
+/* Pantalla de cocina */
+body.kds-wide main { max-width: 1500px; }
+.kds-head { display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:10px; }
+.kds-head-actions { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+.kds-head-actions button.ghost { width:auto; border:1px solid var(--border); border-radius:999px; padding:6px 12px; }
+.kds-live { color:var(--tm-red, #ff3035); font-weight:700; font-size:13px; }
+.kds-kpis { display:grid; grid-template-columns:repeat(auto-fit, minmax(150px,1fr)); gap:8px; margin-bottom:12px; }
+.kds-board { display:grid; grid-template-columns:repeat(auto-fit, minmax(260px,1fr)); gap:12px; align-items:start; }
+.kds-col { background:var(--bg); border:1px solid var(--border); border-radius:0.9rem; padding:10px; min-height:120px; }
+.kds-col-h { font-family:Anton, Impact, sans-serif; text-transform:uppercase; letter-spacing:.02em; font-size:18px; margin:2px 4px 10px; display:flex; align-items:center; gap:6px; }
+.kds-count { margin-left:auto; background:var(--fg); color:var(--bg); border-radius:999px; padding:1px 10px; font-family:Arial, sans-serif; font-size:14px; font-weight:700; }
+.kds-col-horno .kds-col-h { color:var(--tm-red, #ff3035); }
+.kds-card { background:var(--card); border:2px solid var(--border); border-radius:0.75rem; padding:12px; margin-bottom:10px; }
+.kds-card-top { display:flex; justify-content:space-between; gap:8px; align-items:baseline; }
+.kds-num { font-family:Anton, Impact, sans-serif; font-size:22px; letter-spacing:.02em; }
+.kds-place { font-weight:800; font-size:15px; }
+.kds-who { font-size:13.5px; color:var(--muted); margin-top:2px; }
+.kds-items { list-style:none; margin:8px 0; padding:0; font-size:17px; line-height:1.35; }
+.kds-items li { padding:2px 0; }
+.kds-times { display:flex; flex-direction:column; gap:2px; }
+.kds-timer { font-size:16px; }
+.kds-timer b { font-size:20px; font-variant-numeric:tabular-nums; }
+.kds-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+.kds-actions .kds-go { flex:1 1 100%; min-height:52px; font-size:16px; }
+.kds-actions .kds-alt { width:auto; flex:1; min-height:40px; border:1px solid var(--border); border-radius:0.5rem; }
+.kds-empty { color:var(--muted); text-align:center; padding:18px 0; font-size:14px; }
+.kds-card.kds-late { border-color:var(--tm-red, #ff3035); box-shadow:0 0 0 2px rgba(255,48,53,.25); }
+.kds-card.kds-late .kds-timer b { color:var(--tm-red, #ff3035); }
+.kds-card.kds-fresh { animation:kdsPulse 1s ease-in-out 0s 6; }
+@keyframes kdsPulse { 0%,100% { box-shadow:0 0 0 0 rgba(255,48,53,0); } 50% { box-shadow:0 0 0 6px rgba(255,48,53,.45); } }
+@media (prefers-reduced-motion: reduce){ .kds-card.kds-fresh { animation:none; border-color:var(--tm-red, #ff3035); } }
+.kds-kpis .kpi { padding:10px 12px; }
+.kds-kpis .kpi .v { font-size:20px; }
+
   /* ==================================================================
      Identidad Tomates Pizzería (guía web/PWA 1.0) — se carga después
      de los estilos originales y solo redefine tokens y componentes.
@@ -1014,10 +1048,10 @@ function renderOrders(){
     const st = o.status==='entregado' ? 'entregado' : (o.status==='listo' ? 'listo' : 'pendiente');
     const itemsTxt = (o.items||[]).map(it=>`${it.qty}× ${it.name}`).join(', ');
     const myPendingRequest = state.editRequests.find(r=>r.orderId===o.id && r.status==='pendiente');
-    const title = o.customerName ? o.customerName : (o.spot || ('Pedido #'+(o.id||'').slice(0,5)));
+    const title = o.customerName ? o.customerName : (o.spot || (o.orderType==='llevar' ? 'Para llevar' : ('Pedido #'+(o.id||'').slice(0,5))));
     const pill = st==='entregado' ? '<span class="pill good">Entregado</span>'
       : st==='listo' ? '<span class="pill ready">Listo</span>'
-      : '<span class="pill warn">En cocina</span>';
+      : (o.kitchenStage==='horno' ? '<span class="pill warn">🔥 En horno</span>' : o.kitchenStage==='preparacion' ? '<span class="pill warn">🔪 En preparación</span>' : '<span class="pill warn">🧾 En cola</span>');
     let timeline = '';
     if(o.createdAt){
       const parts = [];
@@ -1039,6 +1073,7 @@ function renderOrders(){
       <div class="item-meta">#${(o.id||'').slice(0,5)} · ${fmtOrderDateTime(o)}</div>
       <div class="item-meta" style="margin-top:6px;color:var(--fg)">${itemsTxt}</div>
       ${o.orderType==='local' && o.spot ? `<div class="item-meta" style="color:var(--fg);font-weight:700">🍽️ ${esc(o.spot)}</div>`:''}
+      ${o.orderType==='llevar' ? `<div class="item-meta" style="color:var(--fg);font-weight:700">🥡 Para llevar (recoge en el local)</div>`:''}
       ${o.orderType==='domicilio' && o.customerAddress ? `<div class="item-meta" style="color:var(--fg)">📍 ${esc(o.customerAddress)}${o.customerPhone?' · 📱 '+esc(phoneLast10(o.customerPhone)):''}</div>`:''}
       ${o.deliveryFee? `<div class="item-meta">🛵 Domicilio: ${fmt(o.deliveryFee)}${o.deliveryService?' · '+esc(o.deliveryService):''}</div>`:''}
       ${timeline}
@@ -1326,6 +1361,7 @@ function renderOrderMainScreen(){
     <label style="margin-top:4px">¿Dónde es el pedido? *</label>
     <div class="ot-chips">
       <button type="button" class="ot-chip${orderType==='domicilio'?' on':''}" onclick="selectOrderType('domicilio')">🛵 Domicilio</button>
+      <button type="button" class="ot-chip${orderType==='llevar'?' on':''}" onclick="selectOrderType('llevar')">🥡 Para llevar</button>
       ${ORDER_SPOTS.map(sp=>`<button type="button" class="ot-chip${orderType==='local'&&orderSpot===sp?' on':''}" onclick="selectOrderType('local','${sp}')">${sp}</button>`).join('')}
     </div>
     ${backButtonHtml}
@@ -1488,7 +1524,7 @@ async function saveOrder(){
     return;
   }
   const deliveryService = orderDeliveryManual ? (orderDeliveryService || 'Servicio externo') : '';
-  if(orderType!=='domicilio' && !(orderType==='local' && orderSpot)){ setOrderErr('Elige si el pedido es Domicilio o una mesa/barra del local (arriba).'); return; }
+  if(orderType!=='domicilio' && orderType!=='llevar' && !(orderType==='local' && orderSpot)){ setOrderErr('Elige si el pedido es Domicilio, Para llevar o una mesa/barra del local (arriba).'); return; }
   let dom = null, custFields = {};
   if(orderType==='domicilio'){
     const phone = normPhoneCO(orderCust.phone), name = (orderCust.name||'').trim(), address = (orderCust.address||'').trim();
@@ -2868,7 +2904,7 @@ async function exportExcel(){
   const wb = XLSX.utils.book_new();
 
   const pedidos = state.orders.map(o=>({
-    id: o.id, fecha: o.date, tipo: o.orderType==='domicilio' ? 'Domicilio' : (o.orderType==='local' ? 'Local' : ''), ubicacion: o.spot||'', cliente: o.customerName||'', telefono: o.customerPhone||'', direccion: o.customerAddress||'',
+    id: o.id, fecha: o.date, tipo: o.orderType==='domicilio' ? 'Domicilio' : o.orderType==='llevar' ? 'Para llevar' : (o.orderType==='local' ? 'Local' : ''), ubicacion: o.spot||'', cliente: o.customerName||'', telefono: o.customerPhone||'', direccion: o.customerAddress||'',
     items: (o.items||[]).map(it=>`${it.qty}x ${it.name}`).join(', '),
     total: o.total||0, estado: o.status||'', pago: o.paymentMethodLabel||'', montoPago: o.paymentAmount||''
   }));
@@ -3822,6 +3858,31 @@ initDb();
     (state.purchases||[]).filter(p=>p.date && p.date>=from && p.date<=to).forEach(p=>{ const b = B[keyOf(p.date)]; if(b) b.purchases += p.totalCost||0; });
 
     const rows = keys.map(k=>B[k]);
+    // Ventas por tipo de pedido
+    const TYPES = [['domicilio','🛵 Domicilio'],['mesa','🍽️ Mesas'],['barra','🍺 Barra'],['llevar','🥡 Para llevar'],['otro','Sin clasificar']];
+    const typeOf = (o)=> o.orderType==='domicilio' || (!o.orderType && o.deliveryFee) ? 'domicilio' : o.orderType==='llevar' ? 'llevar'
+      : o.orderType==='local' ? (/^barra/i.test(o.spot||'') ? 'barra' : 'mesa') : 'otro';
+    const byType = {}; TYPES.forEach(([k])=> byType[k] = { n:0, sales:0 });
+    const spots = {};
+    (state.orders||[]).filter(o=>o.status==='entregado' && o.date && o.date>=from && o.date<=to).forEach(o=>{
+      const t = byType[typeOf(o)]; t.n += 1; t.sales += (o.total||0) - (o.deliveryFee||0);
+      if(o.orderType==='local' && o.spot){ const sp = spots[o.spot] = spots[o.spot] || { n:0, sales:0 }; sp.n += 1; sp.sales += (o.total||0); }
+    });
+    const typeRows = TYPES.filter(([k])=> k!=='otro' || byType.otro.n>0).map(([k,l])=>({ k, l, ...byType[k] }));
+    // Tiempos de cocina (promedios por periodo)
+    const KT = {}; keys.forEach(k=> KT[k] = { wait:[], prep:[], oven:[], total:[], deliv:[] });
+    (state.orders||[]).filter(o=>o.date && o.date>=from && o.date<=to && o.createdAt).forEach(o=>{
+      const t = KT[keyOf(o.date)]; if(!t) return;
+      if(o.prepAt) t.wait.push(o.prepAt - o.createdAt);
+      if(o.prepAt && (o.ovenAt||o.readyAt)) t.prep.push((o.ovenAt||o.readyAt) - o.prepAt);
+      if(o.ovenAt && o.readyAt) t.oven.push(o.readyAt - o.ovenAt);
+      if(o.readyAt) t.total.push(o.readyAt - o.createdAt);
+      if(o.readyAt && o.deliveredAt && o.deliveredAt>=o.readyAt) t.deliv.push(o.deliveredAt - o.readyAt);
+    });
+    const mins = (a)=> a.length ? (a.reduce((x,y)=>x+y,0)/a.length/60000) : null;
+    const minTxt = (v)=> v==null ? '—' : (v<1 ? '<1' : v.toLocaleString('es-CO',{maximumFractionDigits:1}))+' min';
+    const KTall = { wait:[], prep:[], oven:[], total:[], deliv:[] };
+    keys.forEach(k=> Object.keys(KTall).forEach(f=> KTall[f].push(...KT[k][f])));
     const T = rows.reduce((t,r)=>({ orders:t.orders+r.orders, sales:t.sales+r.sales, purchases:t.purchases+r.purchases, cogs:t.cogs+r.cogs }), {orders:0,sales:0,purchases:0,cogs:0});
     const diff = T.sales - T.purchases;
     const kpi = (v,l,cls)=>`<div class="kpi"><div class="v"${cls?` style="color:${cls}"`:''}>${v}</div><div class="l">${l}</div></div>`;
@@ -3852,6 +3913,23 @@ initDb();
           <td style="text-align:right">${escH(fmt(r.cogs))}</td></tr>`).join('')}
           <tr style="font-weight:700"><td>Total</td><td style="text-align:right">${T.orders}</td><td style="text-align:right">${escH(fmt(T.sales))}</td><td style="text-align:right">${escH(fmt(T.purchases))}</td><td style="text-align:right">${escH(fmt(diff))}</td><td style="text-align:right">${escH(fmt(T.cogs))}</td></tr>
         </tbody></table></div>
+
+      <h3 class="section-title" style="font-size:20px;margin-top:18px">Ventas por tipo de pedido</h3>
+      <div class="perm-wrap"><table class="perm-table" style="min-width:420px">
+        <thead><tr><th style="text-align:left">Tipo</th><th>Pedidos</th><th>Ventas</th><th>% de ventas</th><th>Ticket promedio</th></tr></thead>
+        <tbody>${typeRows.map(r=>`<tr><td>${escH(r.l)}</td><td style="text-align:right">${r.n}</td><td style="text-align:right">${escH(fmt(r.sales))}</td>
+          <td style="text-align:right">${pctTxt(T.sales>0 ? r.sales/T.sales*100 : null)}</td><td style="text-align:right">${r.n ? escH(fmt(r.sales/r.n)) : '—'}</td></tr>`).join('')}</tbody></table></div>
+      ${Object.keys(spots).length ? `<div class="item-meta" style="margin-top:6px">Por ubicación: ${Object.keys(spots).sort().map(k=>`${escH(k)} ${spots[k].n} (${escH(fmt(spots[k].sales))})`).join(' · ')}</div>` : ''}
+
+      <h3 class="section-title" style="font-size:20px;margin-top:18px">Tiempos de cocina</h3>
+      <div class="perm-wrap"><table class="perm-table" style="min-width:620px">
+        <thead><tr><th style="text-align:left">Periodo</th><th>Pedidos medidos</th><th>Espera</th><th>Preparación</th><th>Horno</th><th>Pedido → listo</th><th>Listo → entregado</th></tr></thead>
+        <tbody>${keys.slice().reverse().map(k=>{ const t = KT[k]; return `<tr><td>${escH(labelOf(k))}</td><td style="text-align:right">${t.total.length}</td>
+          <td style="text-align:right">${minTxt(mins(t.wait))}</td><td style="text-align:right">${minTxt(mins(t.prep))}</td><td style="text-align:right">${minTxt(mins(t.oven))}</td>
+          <td style="text-align:right">${minTxt(mins(t.total))}</td><td style="text-align:right">${minTxt(mins(t.deliv))}</td></tr>`; }).join('')}
+          <tr style="font-weight:700"><td>Promedio</td><td style="text-align:right">${KTall.total.length}</td><td style="text-align:right">${minTxt(mins(KTall.wait))}</td><td style="text-align:right">${minTxt(mins(KTall.prep))}</td><td style="text-align:right">${minTxt(mins(KTall.oven))}</td><td style="text-align:right">${minTxt(mins(KTall.total))}</td><td style="text-align:right">${minTxt(mins(KTall.deliv))}</td></tr>
+        </tbody></table></div>
+      <div class="item-meta" style="margin-top:4px">Espera: desde que se toma el pedido hasta que cocina empieza a prepararlo. Preparación: hasta que entra al horno (o queda listo si no lleva horno). Horno: hasta que se marca listo.</div>
 
       <h3 class="section-title" style="font-size:20px;margin-top:18px">Productos vendidos</h3>
       ${prodRows.length ? `<div class="perm-wrap"><table class="perm-table" style="min-width:520px">
@@ -3884,13 +3962,210 @@ initDb();
 </script>
 <script>
 /* =====================================================================
+   Tomates — pantalla de COCINA (permiso cocina.ver; mover pedidos: cocina.operar)
+   Los pedidos llegan en vivo y pasan por: Nuevos → En preparación → Horno → Listo.
+   Cada paso guarda su hora (prepAt, ovenAt, readyAt) para medir la cadena de producción.
+===================================================================== */
+(function(){
+  const TOM = window.TOM;
+  const escH = (s)=>String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const STAGES = [
+    { key:'cola',        title:'Nuevos',          ic:'🧾', next:'preparacion', btn:'🔪 Empezar preparación' },
+    { key:'preparacion', title:'En preparación',  ic:'🔪', next:'horno',       btn:'🔥 Pasar al horno', alt:{ to:'listo', label:'Listo sin horno' } },
+    { key:'horno',       title:'En horno',        ic:'🔥', next:'listo',       btn:'✅ Listo' },
+    { key:'listo',       title:'Listos',          ic:'✅' },
+  ];
+  // Alerta si un pedido lleva más de estos minutos en la etapa
+  const LIMIT_MIN = { cola:5, preparacion:10, horno:12, listo:15 };
+
+  window.kitchenStage = function(o){
+    if(o.status==='entregado') return 'entregado';
+    if(o.status==='listo') return 'listo';
+    if(o.kitchenStage==='horno') return 'horno';
+    if(o.kitchenStage==='preparacion') return 'preparacion';
+    return 'cola';
+  };
+  const stageSince = (o, st)=> st==='cola' ? o.createdAt : st==='preparacion' ? (o.prepAt||o.createdAt)
+    : st==='horno' ? (o.ovenAt||o.prepAt||o.createdAt) : (o.readyAt||o.createdAt);
+  window.orderPlaceLabel = function(o){
+    if(o.orderType==='domicilio') return '🛵 Domicilio';
+    if(o.orderType==='llevar') return '🥡 Para llevar';
+    if(o.orderType==='local' && o.spot) return '🍽️ '+o.spot;
+    return o.deliveryFee ? '🛵 Domicilio' : '';
+  };
+  const clock = (ms)=>{ if(!(ms>=0)) return '—'; const s = Math.floor(ms/1000); const h = Math.floor(s/3600), m = Math.floor((s%3600)/60), x = s%60;
+    return (h? h+':'+String(m).padStart(2,'0') : m)+':'+String(x).padStart(2,'0'); };
+  const avg = (arr)=> arr.length ? arr.reduce((a,b)=>a+b,0)/arr.length : null;
+
+  /* ---------- Pestaña ---------- */
+  const main = document.querySelector('main');
+  const sec = document.createElement('section');
+  sec.className = 'tab'; sec.id = 'tab-cocina';
+  sec.innerHTML = `
+    <div class="kds-head">
+      <h2 class="section-title" style="margin:0">Cocina</h2>
+      <div class="kds-head-actions">
+        <span class="kds-live" id="kdsClock">●</span>
+        <button class="ghost" id="kdsSound" type="button">🔔 Sonido</button>
+        <button class="ghost" id="kdsFull" type="button">⛶ Pantalla completa</button>
+      </div>
+    </div>
+    <div class="kds-kpis" id="kdsKpis"></div>
+    <div class="kds-board" id="kdsBoard"></div>`;
+  main.appendChild(sec);
+
+  const nav = document.querySelector('nav.tabbar');
+  const btn = document.createElement('button');
+  btn.dataset.tab = 'cocina'; btn.style.display = 'none';
+  btn.innerHTML = '<span class="ic">👨‍🍳</span>Cocina';
+  const after = nav.querySelector('button[data-tab="pedidos"]');
+  nav.insertBefore(btn, after ? after.nextSibling : nav.firstChild);
+  btn.addEventListener('click', ()=>{
+    nav.querySelectorAll('button').forEach(b=>b.classList.remove('active'));
+    document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+    btn.classList.add('active'); sec.classList.add('active');
+    document.body.classList.add('kds-wide');
+    updateTopAction('cocina');
+    renderKitchen();
+  });
+  nav.addEventListener('click', (e)=>{ const b = e.target.closest('button'); if(b && b.dataset.tab!=='cocina') document.body.classList.remove('kds-wide'); });
+
+  sec.querySelector('#kdsFull').addEventListener('click', ()=>{
+    const el = document.documentElement;
+    if(document.fullscreenElement) document.exitFullscreen(); else if(el.requestFullscreen) el.requestFullscreen().catch(()=>{});
+  });
+
+  /* ---------- Sonido al llegar un pedido nuevo ---------- */
+  let soundOn = false, actx = null;
+  try{ soundOn = localStorage.getItem('kdsSound')==='1'; }catch(_){}
+  const soundBtn = sec.querySelector('#kdsSound');
+  const paintSound = ()=>{ soundBtn.textContent = soundOn ? '🔔 Sonido activo' : '🔕 Activar sonido'; };
+  paintSound();
+  soundBtn.addEventListener('click', ()=>{
+    soundOn = !soundOn; try{ localStorage.setItem('kdsSound', soundOn?'1':'0'); }catch(_){}
+    paintSound(); if(soundOn) beep();
+  });
+  function beep(){
+    try{
+      actx = actx || new (window.AudioContext||window.webkitAudioContext)();
+      [0, 0.22].forEach(t=>{
+        const o = actx.createOscillator(), g = actx.createGain();
+        o.type = 'sine'; o.frequency.value = 880; g.gain.value = 0.18;
+        o.connect(g); g.connect(actx.destination);
+        o.start(actx.currentTime + t); o.stop(actx.currentTime + t + 0.15);
+      });
+    }catch(_){}
+  }
+
+  /* ---------- Acciones ---------- */
+  const busy = new Set();
+  window.kitchenMove = async function(id, stage){
+    if(busy.has(id)) return; busy.add(id);
+    try{ await TOM.rpc('set_kitchen_stage', { p_order_id:id, p_stage:stage }); }
+    catch(e){ toast((e && e.message) || 'No se pudo mover el pedido'); }
+    finally{ busy.delete(id); }
+  };
+
+  /* ---------- Render ---------- */
+  let known = null; // ids ya vistos, para resaltar los nuevos
+  const fresh = new Map(); // id -> hasta cuándo resaltar
+  function itemsHtml(o){
+    return (o.items||[]).map(it=>`<li><b>${escH(it.qty)}×</b> ${escH(it.name)}</li>`).join('');
+  }
+  function cardHtml(o, st, canOp){
+    const def = STAGES.find(s=>s.key===st);
+    const since = stageSince(o, st);
+    const who = o.customerName ? escH(o.customerName) : '';
+    const place = orderPlaceLabel(o);
+    const isFresh = fresh.has(o.id) && fresh.get(o.id) > Date.now();
+    let actions = '';
+    if(canOp && def.next){
+      actions = `<button class="primary kds-go" onclick="kitchenMove('${o.id}','${def.next}')">${def.btn}</button>`;
+      if(def.alt) actions += `<button class="ghost kds-alt" onclick="kitchenMove('${o.id}','${def.alt.to}')">${def.alt.label}</button>`;
+    }
+    if(canOp && st!=='cola') actions += `<button class="ghost kds-alt" onclick="kitchenMove('${o.id}','atras')" title="Devolver a la etapa anterior">↩︎ Atrás</button>`;
+    const steps = [];
+    if(o.prepAt) steps.push('espera '+clock(o.prepAt - o.createdAt));
+    if(o.prepAt && (o.ovenAt||o.readyAt)) steps.push('prep '+clock((o.ovenAt||o.readyAt) - o.prepAt));
+    if(o.ovenAt && o.readyAt) steps.push('horno '+clock(o.readyAt - o.ovenAt));
+    return `<div class="kds-card${isFresh?' kds-fresh':''}" data-id="${o.id}" data-since="${since||''}" data-limit="${LIMIT_MIN[st]}">
+      <div class="kds-card-top">
+        <span class="kds-num">#${escH((o.id||'').slice(0,5))}</span>
+        <span class="kds-place">${escH(place)}</span>
+      </div>
+      ${who ? `<div class="kds-who">${who}</div>` : ''}
+      <ul class="kds-items">${itemsHtml(o)}</ul>
+      <div class="kds-times">
+        <span class="kds-timer" title="Tiempo en esta etapa">⏱ <b>${clock(Date.now()-since)}</b></span>
+        <span class="item-meta">pedido ${o.createdAt? fmtTime(o.createdAt):''}${steps.length?' · '+steps.join(' · '):''}</span>
+      </div>
+      ${actions ? `<div class="kds-actions">${actions}</div>` : ''}
+    </div>`;
+  }
+
+  window.renderKitchen = function(){
+    if(!sec.classList.contains('active')) return;
+    const today = todayStr();
+    const live = state.orders.filter(o=>o.status!=='entregado' && o.date >= addDaysStr(today,-1));
+    // pedidos nuevos (para sonido y resaltado)
+    const ids = new Set(live.filter(o=>kitchenStage(o)==='cola').map(o=>o.id));
+    if(known){ let any = false; ids.forEach(id=>{ if(!known.has(id)){ fresh.set(id, Date.now()+8000); any = true; } }); if(any && soundOn) beep(); }
+    known = new Set([...(known||[]), ...ids]);
+
+    const canOp = TOM.can('cocina.operar');
+    const by = { cola:[], preparacion:[], horno:[], listo:[] };
+    live.forEach(o=>{ const st = kitchenStage(o); if(by[st]) by[st].push(o); });
+    Object.keys(by).forEach(k=>by[k].sort((a,b)=>(stageSince(a,k)||0)-(stageSince(b,k)||0)));
+
+    // Promedios de hoy
+    const todays = state.orders.filter(o=>o.date===today);
+    const wait = todays.filter(o=>o.prepAt).map(o=>o.prepAt-o.createdAt);
+    const prep = todays.filter(o=>o.prepAt && (o.ovenAt||o.readyAt)).map(o=>(o.ovenAt||o.readyAt)-o.prepAt);
+    const oven = todays.filter(o=>o.ovenAt && o.readyAt).map(o=>o.readyAt-o.ovenAt);
+    const total = todays.filter(o=>o.readyAt).map(o=>o.readyAt-o.createdAt);
+    const k = (v,l)=>`<div class="kpi"><div class="v">${v}</div><div class="l">${l}</div></div>`;
+    const avgTxt = (a)=>{ const v = avg(a); return v==null ? '—' : clock(v); };
+    document.getElementById('kdsKpis').innerHTML =
+      k(by.cola.length,'🧾 Nuevos') + k(by.preparacion.length,'🔪 En preparación') + k(by.horno.length,'🔥 En horno') + k(by.listo.length,'✅ Listos sin entregar') +
+      k(avgTxt(wait),'Espera promedio hoy') + k(avgTxt(prep),'Preparación promedio') + k(avgTxt(oven),'Horno promedio') + k(avgTxt(total),'Pedido → listo (promedio, '+total.length+')');
+
+    document.getElementById('kdsBoard').innerHTML = STAGES.map(s=>`
+      <div class="kds-col kds-col-${s.key}">
+        <div class="kds-col-h">${s.ic} ${s.title} <span class="kds-count">${by[s.key].length}</span></div>
+        ${by[s.key].length ? by[s.key].map(o=>cardHtml(o, s.key, canOp)).join('') : '<div class="kds-empty">Sin pedidos</div>'}
+      </div>`).join('');
+    tick();
+  };
+  function addDaysStr(s, n){ const [y,m,d] = s.split('-').map(Number); const t = new Date(y, m-1, d+n); return t.getFullYear()+'-'+String(t.getMonth()+1).padStart(2,'0')+'-'+String(t.getDate()).padStart(2,'0'); }
+
+  // Relojes en vivo, sin redibujar toda la pantalla
+  function tick(){
+    if(!sec.classList.contains('active')) return;
+    const now = Date.now();
+    sec.querySelectorAll('.kds-card').forEach(c=>{
+      const since = Number(c.dataset.since); if(!since) return;
+      const el = c.querySelector('.kds-timer b'); if(el) el.textContent = clock(now-since);
+      c.classList.toggle('kds-late', (now-since) > Number(c.dataset.limit)*60000);
+      if(c.classList.contains('kds-fresh') && !(fresh.get(c.dataset.id) > now)) c.classList.remove('kds-fresh');
+    });
+    const ck = document.getElementById('kdsClock'); if(ck) ck.textContent = '● En vivo · ' + fmtTime(now);
+  }
+  setInterval(tick, 1000);
+
+  const _renderAll = window.renderAll;
+  window.renderAll = function(){ _renderAll(); renderKitchen(); };
+})();
+
+</script>
+<script>
+/* =====================================================================
    Tomates — inicio de sesión, permisos por rol y ajustes a la app
    Va DESPUÉS del script principal.
 ===================================================================== */
 (function(){
   const TOM = window.TOM; const sb = TOM.sb;
-  const ROLE_LABEL = { admin:'Administrador', supervisor:'Supervisor', cajero:'Cajero', asesor:'Asesor WhatsApp',
-                       domiciliario:'Domiciliario', pendiente:'Pendiente', inactivo:'Inactivo' };
+  const ROLE_LABEL = { admin:'Administrador', supervisor:'Supervisor', cajero:'Vendedor (mostrador)', asesor:'Asesor WhatsApp',
+                       domiciliario:'Domiciliario', cocina:'Cocina', pendiente:'Pendiente', inactivo:'Inactivo' };
   window.ROLE_LABEL = ROLE_LABEL;
   const $ = (s)=>document.querySelector(s);
   const escH = (s)=>String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -4024,7 +4299,7 @@ initDb();
 
   /* ---------------- Permisos: qué pestañas ve cada rol ---------------- */
   const TAB_PERMS = {
-    pedidos:['ventas.ver','domicilios.ver'], menu:['menu.gestionar','menu.ver_costos'], recetas:['menu.ver_costos'],
+    pedidos:['ventas.ver','domicilios.ver'], cocina:['cocina.ver'], menu:['menu.gestionar','menu.ver_costos'], recetas:['menu.ver_costos'],
     inventario:['inventario.ver'], compras:['compras.gestionar'], gastos:['gastos.gestionar'], caja:['caja.ver'],
     clientes:['clientes.ver'], informes:['informes.ver'], analisis:['analisis.ver'], usuarios:['usuarios.gestionar']
   };
@@ -4130,7 +4405,7 @@ initDb();
   };
 
   /* ---------------- Usuarios: invitar, cambiar rol, desactivar ---------------- */
-  const ASSIGNABLE = ['supervisor','cajero','asesor','domiciliario'];
+  const ASSIGNABLE = ['supervisor','cajero','asesor','domiciliario','cocina'];
   let invitesCache = [];
   async function loadInvites(){
     if(!TOM.can('usuarios.gestionar')) return;
