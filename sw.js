@@ -1,7 +1,7 @@
 /* Tomates Pizza — service worker
    Guarda solo la interfaz y la marca (caché versionada). Nunca guarda
    respuestas de Supabase (datos del negocio, sesiones ni pedidos). */
-const VERSION = 'tomates-shell-2026-11-12-2';
+const VERSION = 'tomates-shell-2026-11-12-3';
 const SHELL = [
   './',
   './index.html',
@@ -40,6 +40,9 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(req.url);
 
   // Página: primero la red (siempre la versión publicada); sin red, la última guardada
+  // (el menú público menu.html no se guarda: siempre va a la red)
+  const isApp = /\/(index\.html)?$/.test(url.pathname);
+  if (req.mode === 'navigate' && url.origin === self.location.origin && !isApp) return;
   if (req.mode === 'navigate' && url.origin === self.location.origin) {
     event.respondWith((async () => {
       try {
