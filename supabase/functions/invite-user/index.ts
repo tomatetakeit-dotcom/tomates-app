@@ -1,6 +1,8 @@
 // Edge Function: invite-user
-// Invita a una persona por correo y registra su rol. Solo la puede usar quien tenga
-// el permiso "usuarios.gestionar"; solo un administrador puede invitar a otro administrador.
+// Invita a una persona por correo y registra su rol, o crea un usuario SIN correo
+// (nombre de usuario + contraseña temporal), o cambia la contraseña de alguien.
+// Solo la puede usar quien tenga el permiso "usuarios.gestionar"; solo un administrador
+// puede crear o tocar a otro administrador.
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
 const CORS = {
@@ -12,6 +14,7 @@ const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { ...CORS, "Content-Type": "application/json" } });
 
 const ROLES = ["admin", "supervisor", "cajero", "asesor", "domiciliario", "cocina"];
+const USERNAME_DOMAIN = "usuarios.tomates.invalid";  // dominio reservado: nunca recibe correos
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
@@ -44,6 +47,51 @@ Deno.serve(async (req) => {
 
   let body: Record<string, string>;
   try { body = await req.json(); } catch { return json({ error: "Solicitud no válida." }, 400); }
+  const action = String(body.action || "invite");
+
+  // ---------- Usuario sin correo: nombre de usuario + contraseña temporal ----------
+  if (action === "create_username") {
+    const username = String(body.username || "").trim().toLowerCase();
+    const password = String(body.password || "");
+    const uname = String(body.name || "").trim().slice(0, 120);
+    const urole = String(body.role || "");
+    if (!/^[a-z0-9][a-z0-9._-]{2,29}$/.test(username)) {
+      return json({ error: "Usuario no válido: 3 a 30 caracteres, letras minúsculas, números, punto, guion o guion bajo." }, 400);
+    }
+    if (password.length < 8) return json({ error: "La contraseña debe tener mínimo 8 caracteres." }, 400);
+    if (!ROLES.includes(urole)) return json({ error: "Rol no válido." }, 400);
+    if (urole === "admin" && callerRole !== "admin") return json({ error: "Solo un administrador puede crear otro administrador." }, 403);
+    const uemail = `${username}@${USERNAME_DOMAIN}`;
+    const { data: dup } = await admin.from("profiles").select("id").eq("email", uemail).maybeSingle();
+    if (dup) return json({ error: "Ese nombre de usuario ya existe." }, 409);
+    const { error: iErr } = await admin.from("invitations").upsert({
+      email: uemail, name: uname || username, phone: "", role: urole, invited_by: callerId, accepted_at: new Date().toISOString(),
+    });
+    if (iErr) return json({ error: "No se pudo registrar el usuario." }, 500);
+    const { error: cErr } = await admin.auth.admin.createUser({
+      email: uemail, password, email_confirm: true,
+      user_metadata: { name: uname || username, username, must_change_password: true },
+    });
+    if (cErr) return json({ error: "No se pudo crear el usuario: " + cErr.message }, 500);
+    return json({ ok: true, username });
+  }
+
+  // ---------- Cambiar la contraseña de una persona (queda como temporal) ----------
+  if (action === "set_password") {
+    const userId = String(body.userId || "");
+    const password = String(body.password || "");
+    if (password.length < 8) return json({ error: "La contraseña debe tener mínimo 8 caracteres." }, 400);
+    if (userId === callerId) return json({ error: "Cambia tu propia contraseña desde tu sesión." }, 400);
+    const { data: target } = await admin.from("profiles").select("id, role").eq("id", userId).maybeSingle();
+    if (!target) return json({ error: "Usuario no encontrado." }, 404);
+    if (target.role === "admin" && callerRole !== "admin") return json({ error: "Solo un administrador puede cambiar la contraseña de otro administrador." }, 403);
+    const { data: au } = await admin.auth.admin.getUserById(userId);
+    const meta = { ...(au?.user?.user_metadata || {}), must_change_password: true };
+    const { error: pErr } = await admin.auth.admin.updateUserById(userId, { password, user_metadata: meta });
+    if (pErr) return json({ error: "No se pudo cambiar la contraseña: " + pErr.message }, 500);
+    return json({ ok: true });
+  }
+
   const email = String(body.email || "").trim().toLowerCase();
   const name = String(body.name || "").trim().slice(0, 120);
   const phone = String(body.phone || "").trim().slice(0, 30);
