@@ -4889,22 +4889,75 @@ function orderTotalBreakHtml(sub, dsc){
   const pendingWeb = ()=> (state.orders||[]).filter(o=>o.webStatus==='por_confirmar').sort((a,b)=>(a.createdAt||0)-(b.createdAt||0));
   const ventas = document.getElementById('tab-pedidos');
   const banner = document.createElement('div');
-  banner.id = 'webPendingBanner'; banner.className = 'banner'; banner.style.display = 'none'; banner.style.cursor = 'pointer';
-  banner.onclick = ()=>{ const el = document.getElementById('ordersList'); if(el) el.scrollIntoView({ behavior:'smooth' }); };
+  banner.id = 'webPendingBanner'; banner.className = 'banner'; banner.style.display = 'none';
   if(ventas){ const h = ventas.querySelector('.section-title'); ventas.insertBefore(banner, h ? h.nextSibling : ventas.firstChild); }
-  let seen = null;
-  function beep(){
-    try{ const C = window.AudioContext || window.webkitAudioContext; const ac = new C(); [0, .22].forEach(t=>{ const o = ac.createOscillator(), g = ac.createGain();
-      o.frequency.value = 988; g.gain.setValueAtTime(.2, ac.currentTime+t); g.gain.exponentialRampToValueAtTime(.001, ac.currentTime+t+.18);
-      o.connect(g); g.connect(ac.destination); o.start(ac.currentTime+t); o.stop(ac.currentTime+t+.2); }); }catch(e){}
+
+  /* ---------- Alerta sonora de pedidos web ----------
+     Suena al entrar un pedido web y se repite cada 20 s mientras haya pedidos sin confirmar.
+     Funciona en cualquier pestaña de la app (para quien puede confirmar pedidos).
+     Los navegadores solo permiten sonido después de que la persona toca la pantalla una vez. */
+  const REPEAT_MS = 20000;
+  let soundOn = true; try{ soundOn = localStorage.getItem('webSound')!=='0'; }catch(_){}
+  let actx = null, seen = null, lastAlarm = 0, baseTitle = document.title;
+  const audio = ()=>{ try{ actx = actx || new (window.AudioContext||window.webkitAudioContext)(); }catch(_){} return actx; };
+  const unlock = ()=>{ const was = audioBlocked(); const ac = audio(); if(!ac) return;
+    if(ac.state==='suspended') ac.resume().then(renderWebBanner).catch(()=>{}); else if(was) renderWebBanner(); };
+  ['pointerdown','keydown','touchstart'].forEach(ev=>document.addEventListener(ev, unlock, { passive:true }));
+  const audioBlocked = ()=> !actx || actx.state!=='running';
+  function chime(){
+    const ac = audio(); if(!ac || ac.state!=='running') return false;
+    // "ding-dong-ding" fuerte y distinto al de cocina, dos veces
+    const notes = [[0,1319],[.18,988],[.36,1319],[.9,1319],[1.08,988],[1.26,1319]];
+    notes.forEach(([t,f])=>{
+      const o = ac.createOscillator(), g = ac.createGain(), t0 = ac.currentTime + t;
+      o.type = 'triangle'; o.frequency.value = f;
+      g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(0.6, t0+.02); g.gain.exponentialRampToValueAtTime(0.0001, t0+.17);
+      o.connect(g); g.connect(ac.destination); o.start(t0); o.stop(t0+.19);
+    });
+    return true;
   }
+  function alarm(list, isNew){
+    lastAlarm = Date.now();
+    if(soundOn) chime();
+    try{ navigator.vibrate && navigator.vibrate([300,150,300]); }catch(_){}
+    if(isNew && soundOn && 'Notification' in window && Notification.permission==='granted' && document.visibilityState!=='visible'){
+      try{ const o = list[list.length-1]; new Notification('🌐 Nuevo pedido web — Tomates Pizza', { body: `${o.customerName||''} · ${fmt(o.subtotal||o.total)} · ${orderPlaceLabel(o)}`, tag:'pedido-web', renotify:true, icon:'brand/icons/tomates-192.png' }); }catch(_){}
+    }
+  }
+  window.toggleWebSound = function(ev){
+    if(ev) ev.stopPropagation();
+    soundOn = !soundOn; try{ localStorage.setItem('webSound', soundOn?'1':'0'); }catch(_){}
+    if(soundOn){ unlock(); setTimeout(chime, 50); try{ if('Notification' in window && Notification.permission==='default') Notification.requestPermission(); }catch(_){} }
+    renderWebBanner();
+  };
+  window.testWebSound = function(ev){ if(ev) ev.stopPropagation(); unlock(); setTimeout(()=>{ if(!chime()) toast('Toca la pantalla y vuelve a probar'); }, 80); };
+  setInterval(()=>{
+    if(!TOM.profile || !TOM.can('ventas.crear')) return;
+    const list = pendingWeb();
+    if(list.length && Date.now() - lastAlarm >= REPEAT_MS) alarm(list, false);
+  }, 2000);
+  // Título de la pestaña parpadea mientras haya pedidos web sin confirmar
+  let blink = false;
+  setInterval(()=>{
+    const n = (TOM.profile && TOM.can('ventas.crear')) ? pendingWeb().length : 0;
+    if(!n){ if(document.title!==baseTitle) document.title = baseTitle; return; }
+    blink = !blink; document.title = blink ? `(${n}) 🌐 Pedido web` : baseTitle;
+  }, 1200);
+
   function renderWebBanner(){
     if(!TOM.profile || !TOM.can('ventas.crear')){ banner.style.display = 'none'; return; }
     const list = pendingWeb(), ids = new Set(list.map(o=>o.id));
-    if(seen && list.some(o=>!seen.has(o.id))) beep();
+    if(seen && list.some(o=>!seen.has(o.id))) alarm(list, true);
     seen = ids;
-    banner.style.display = list.length ? '' : 'none';
-    banner.innerHTML = `🌐 <b>${list.length} pedido${list.length===1?'':'s'} web</b> por confirmar. Revisa y confirma para que pasen a cocina.`;
+    banner.style.display = '';
+    const btn = (txt, fn)=>`<button type="button" class="ghost" style="padding:4px 10px;font-size:12.5px" onclick="${fn}(event)">${txt}</button>`;
+    const ctl = `<span style="display:inline-flex;gap:6px;margin-left:6px;vertical-align:middle">${btn(soundOn?'🔔 Sonido activo':'🔕 Sonido apagado','toggleWebSound')}${soundOn?btn('▶ Probar','testWebSound'):''}</span>`;
+    const warn = soundOn && audioBlocked() ? `<div class="item-meta" style="margin-top:4px;font-weight:700">⚠️ Toca cualquier parte de la pantalla para que el aviso pueda sonar.</div>` : '';
+    banner.style.cursor = list.length ? 'pointer' : 'default';
+    banner.onclick = list.length ? ()=>{ const el = document.getElementById('ordersList'); if(el) el.scrollIntoView({ behavior:'smooth' }); } : null;
+    banner.innerHTML = list.length
+      ? `🌐 <b>${list.length} pedido${list.length===1?'':'s'} web</b> por confirmar.${soundOn?' Sonará cada 20 s hasta confirmarlo.':''}${ctl}${warn}`
+      : `<span class="item-meta">🌐 Pedidos web: alerta sonora</span>${ctl}${warn}`;
   }
 
   window.webOrderInfoHtml = function(o){
