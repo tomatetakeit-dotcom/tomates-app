@@ -18,6 +18,7 @@
   TOM.whenReady.then(()=>{
     loadPromos();
     sb.channel('promo_watch').on('postgres_changes', { event:'*', schema:'public', table:'promotions' }, loadPromos).subscribe();
+    window.addEventListener('tomates:resynced', loadPromos);
   });
   function renderPromoBits(){
     const b = document.getElementById('promoBtn'); if(b) b.style.display = TOM.can('promos.gestionar') ? '' : 'none';
