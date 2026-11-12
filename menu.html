@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="es-CO">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Tomates Pizza · Pide aquí</title>
+<meta name="description" content="Menú de Tomates Pizza. Arma tu pedido y envíalo por WhatsApp.">
+<meta name="theme-color" content="#FF3035">
+<link rel="icon" type="image/png" sizes="48x48" href="brand/icons/favicon-48.png">
+<link rel="apple-touch-icon" href="brand/icons/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&display=swap">
+<style>
+  :root { --red:#FF3035; --ink:#111111; --paper:#ffffff; --bg:#f6f6f6; --line:#e3e3e3; --muted:#666; --ok:#1a9b4b; }
+  @media (prefers-color-scheme: dark){ :root { --ink:#f4f4f4; --paper:#1a1a1a; --bg:#111; --line:#333; --muted:#aaa; } }
+  * { box-sizing:border-box; }
+  html,body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.4 Arial, Helvetica, sans-serif; }
+  h1,h2,h3 { font-family:Anton, Impact, sans-serif; text-transform:uppercase; letter-spacing:.02em; font-weight:400; margin:0; }
+  button { font:inherit; cursor:pointer; }
+  .wrap { max-width:720px; margin:0 auto; padding:0 16px 120px; }
+  header { background:var(--ink); color:#fff; }
+  @media (prefers-color-scheme: dark){ header { background:#000; } }
+  .hd { max-width:720px; margin:0 auto; padding:14px 16px; display:flex; gap:12px; align-items:center; }
+  .hd img { width:64px; height:64px; border-radius:50%; background:#fff; }
+  .hd h1 { font-size:28px; line-height:1; }
+  .pill { display:inline-block; border-radius:999px; padding:2px 10px; font-size:13px; font-weight:700; margin-top:6px; }
+  .pill.on { background:var(--ok); color:#fff; } .pill.off { background:var(--red); color:#111; }
+  .msg { max-width:720px; margin:0 auto; padding:0 16px 12px; color:#ddd; font-size:14px; }
+  .banner { background:#fff3f3; color:#111; border-left:4px solid var(--red); padding:10px 12px; border-radius:8px; margin:14px 0; font-size:14.5px; }
+  .cats { position:sticky; top:0; z-index:5; background:var(--bg); display:flex; gap:8px; overflow-x:auto; padding:12px 0 10px; scrollbar-width:none; }
+  .cats::-webkit-scrollbar { display:none; }
+  .chip { flex:0 0 auto; min-height:40px; padding:0 14px; border-radius:999px; border:1.5px solid var(--line); background:var(--paper); color:var(--ink); font-weight:700; font-size:14px; }
+  .chip.on { background:var(--red); border-color:var(--red); color:#111; }
+  .sec h2 { font-size:22px; margin:18px 0 8px; }
+  .item { display:flex; align-items:center; gap:12px; background:var(--paper); border:1px solid var(--line); border-radius:14px; padding:12px 14px; margin-bottom:8px; }
+  .item .nm { font-weight:700; } .item .pr { color:var(--muted); font-size:14.5px; }
+  .item .grow { flex:1; min-width:0; }
+  .add { min-height:44px; min-width:92px; border-radius:10px; border:0; background:var(--red); color:#111; font-weight:800; }
+  .add:disabled { background:var(--line); color:var(--muted); }
+  .qty { display:flex; align-items:center; gap:4px; }
+  .qty button { width:40px; height:40px; border-radius:10px; border:1.5px solid var(--line); background:var(--paper); color:var(--ink); font-size:20px; font-weight:700; }
+  .qty b { min-width:24px; text-align:center; }
+  .bar { position:fixed; left:0; right:0; bottom:0; z-index:10; padding:12px 16px calc(12px + env(safe-area-inset-bottom)); background:linear-gradient(transparent, var(--bg) 30%); }
+  .bar button { display:block; width:100%; max-width:688px; margin:0 auto; min-height:56px; border-radius:14px; border:0; background:var(--red); color:#111; font-weight:800; font-size:17px; box-shadow:0 6px 20px rgba(0,0,0,.18); }
+  .sheet-bg { position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:20; display:none; align-items:flex-end; justify-content:center; }
+  .sheet-bg.open { display:flex; }
+  .sheet { background:var(--paper); color:var(--ink); width:100%; max-width:720px; max-height:92vh; overflow:auto; border-radius:18px 18px 0 0; padding:18px 16px calc(20px + env(safe-area-inset-bottom)); }
+  .sheet h3 { font-size:24px; margin-bottom:8px; }
+  label { display:block; font-weight:700; font-size:14px; margin:12px 0 4px; }
+  input, select, textarea { width:100%; min-height:46px; border:1.5px solid var(--line); border-radius:10px; padding:10px 12px; font:inherit; background:var(--paper); color:var(--ink); }
+  textarea { min-height:70px; }
+  .seg { display:flex; gap:8px; flex-wrap:wrap; }
+  .seg .chip { flex:1; }
+  .line { display:flex; align-items:center; gap:8px; padding:8px 0; border-bottom:1px solid var(--line); }
+  .line .grow { flex:1; min-width:0; }
+  .tot { display:flex; justify-content:space-between; font-weight:800; font-size:18px; margin-top:12px; }
+  .hint { color:var(--muted); font-size:13.5px; margin-top:4px; }
+  .err { color:var(--red); font-weight:700; margin-top:10px; min-height:1em; }
+  .primary { display:block; width:100%; min-height:54px; border:0; border-radius:12px; background:var(--red); color:#111; font-weight:800; font-size:17px; margin-top:16px; }
+  .primary:disabled { opacity:.6; }
+  .secondary { display:block; width:100%; min-height:48px; border:1.5px solid var(--ink); border-radius:12px; background:transparent; color:var(--ink); font-weight:700; margin-top:10px; }
+  .wa { background:#25D366; color:#111; }
+  .center { text-align:center; } .big { font-size:44px; }
+  .hp { position:absolute; left:-5000px; width:1px; height:1px; overflow:hidden; }
+  .empty { text-align:center; color:var(--muted); padding:40px 0; }
+  :focus-visible { outline:3px solid var(--red); outline-offset:2px; }
+</style>
+</head>
+<body>
+<header>
+  <div class="hd">
+    <img src="brand/logo/tomates-logo-440.webp" alt="Tomates Pizza" width="64" height="64">
+    <div><h1>Tomates Pizza</h1><span id="status" class="pill">Cargando…</span></div>
+  </div>
+  <div class="msg" id="bizMsg"></div>
+</header>
+<main class="wrap">
+  <div id="mesaBanner"></div>
+  <nav class="cats" id="cats" aria-label="Categorías"></nav>
+  <div id="menu"><div class="empty">Cargando el menú…</div></div>
+</main>
+<div class="bar" id="bar" hidden><button type="button" id="barBtn"></button></div>
+<div class="sheet-bg" id="sheetBg" role="dialog" aria-modal="true"><div class="sheet" id="sheet"></div></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.57.4/dist/umd/supabase.js"></script>
+<script>
+(function(){
+  const sb = window.supabase.createClient('https://ztvhtrfzycrocpknpsrr.supabase.co', 'sb_publishable_miOBDR7THWpucIkoXgapTA_-kRkZS5G', { auth:{ persistSession:false, autoRefreshToken:false } });
+  const $ = (s)=>document.querySelector(s);
+  const esc = (s)=>String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const fmt = (n)=>'$' + Math.round(Number(n)||0).toLocaleString('es-CO');
+  const store = { get(k){ try{ return JSON.parse(localStorage.getItem('tp_'+k)||'null'); }catch(e){ return null; } }, set(k,v){ try{ localStorage.setItem('tp_'+k, JSON.stringify(v)); }catch(e){} } };
+
+  let menu = null, biz = {}, cart = [], cat = null, sending = false;
+  const params = new URLSearchParams(location.search);
+  let mesa = params.get('mesa') || '';
+  const me = Object.assign({ name:'', waUser:'', phone:'', address:'', type:'domicilio', pay:'efectivo' }, store.get('me')||{});
+
+  async function load(){
+    const { data, error } = await sb.rpc('public_menu');
+    if(error){ $('#menu').innerHTML = '<div class="empty">No pudimos cargar el menú. Revisa tu conexión e intenta de nuevo.</div>'; return; }
+    menu = data.products || []; biz = data.business || {};
+    if(mesa && !(biz.spots||[]).includes(mesa)) mesa = '';
+    $('#status').textContent = biz.open ? 'Recibiendo pedidos' : 'Pedidos web cerrados';
+    $('#status').className = 'pill ' + (biz.open ? 'on' : 'off');
+    $('#bizMsg').textContent = biz.message || '';
+    $('#mesaBanner').innerHTML = mesa ? `<div class="banner">🍽️ Tu pedido es para <b>${esc(mesa)}</b>. Lo llevamos a tu mesa.</div>` : '';
+    if(!biz.open) $('#mesaBanner').innerHTML += `<div class="banner">En este momento no recibimos pedidos por esta página.${biz.whatsapp ? ` <a href="https://wa.me/${esc(biz.whatsapp)}" target="_blank" rel="noopener">Escríbenos por WhatsApp</a>.` : ''}</div>`;
+    render();
+  }
+  const cats = ()=> [...new Set(menu.map(p=>p.category))];
+  const lineKey = (l)=> l.type==='mitad' ? 'm:'+[l.a,l.b].sort().join('|') : 'e:'+l.productId;
+  const prod = (id)=> menu.find(p=>p.id===id);
+  const linePrice = (l)=> l.type==='mitad' ? Math.max(prod(l.a).price, prod(l.b).price) : prod(l.productId).price;
+  const lineName = (l)=> l.type==='mitad' ? `Mitad ${prod(l.a).name} / Mitad ${prod(l.b).name}` : prod(l.productId).name;
+  const total = ()=> cart.reduce((s,l)=>s+linePrice(l)*l.qty, 0);
+  const count = ()=> cart.reduce((s,l)=>s+l.qty, 0);
+  function addLine(l){ const k = lineKey(l); const ex = cart.find(x=>lineKey(x)===k); if(ex) ex.qty = Math.min(20, ex.qty+1); else cart.push(Object.assign({ qty:1 }, l)); render(); }
+  function qtyOf(id){ return cart.filter(l=>l.type!=='mitad' && l.productId===id).reduce((s,l)=>s+l.qty,0); }
+
+  function render(){
+    const cs = cats();
+    $('#cats').innerHTML = cs.map(c=>`<button type="button" class="chip${cat===c?' on':''}" data-c="${esc(c)}">${esc(c)}</button>`).join('');
+    $('#cats').querySelectorAll('.chip').forEach(b=>b.onclick=()=>{ cat = b.dataset.c; const el = document.getElementById('sec-'+cs.indexOf(cat)); if(el) el.scrollIntoView({ behavior:'smooth', block:'start' }); render(); });
+    $('#menu').innerHTML = cs.map((c,i)=>`<section class="sec" id="sec-${i}"><h2>${esc(c)}</h2>${menu.filter(p=>p.category===c).map(p=>{
+      const q = qtyOf(p.id);
+      const ctl = !biz.open ? `<button class="add" disabled>Cerrado</button>`
+        : p.half ? `<button class="add" data-half="${esc(p.id)}">Agregar</button>`
+        : q ? `<div class="qty"><button type="button" data-dec="${esc(p.id)}" aria-label="Quitar uno">−</button><b>${q}</b><button type="button" data-inc="${esc(p.id)}" aria-label="Agregar uno">+</button></div>`
+        : `<button class="add" data-inc="${esc(p.id)}">Agregar</button>`;
+      return `<div class="item"><div class="grow"><div class="nm">${esc(p.name)}</div><div class="pr">${fmt(p.price)}${p.half?' · se puede mitad y mitad':''}</div></div>${ctl}</div>`; }).join('')}</section>`).join('') || '<div class="empty">El menú está vacío.</div>';
+    $('#menu').querySelectorAll('[data-inc]').forEach(b=>b.onclick=()=>addLine({ type:'entera', productId:b.dataset.inc }));
+    $('#menu').querySelectorAll('[data-dec]').forEach(b=>b.onclick=()=>{ const l = cart.find(x=>x.type!=='mitad' && x.productId===b.dataset.dec); if(l){ l.qty--; if(l.qty<=0) cart = cart.filter(x=>x!==l); } render(); });
+    $('#menu').querySelectorAll('[data-half]').forEach(b=>b.onclick=()=>openHalf(b.dataset.half));
+    const n = count();
+    $('#bar').hidden = !n;
+    $('#barBtn').textContent = `Ver mi pedido · ${n} · ${fmt(total())}`;
+  }
+  $('#barBtn').onclick = ()=>openCart();
+
+  function openSheet(html){ $('#sheet').innerHTML = html; $('#sheetBg').classList.add('open'); }
+  function closeSheet(){ $('#sheetBg').classList.remove('open'); }
+  $('#sheetBg').addEventListener('click', (e)=>{ if(e.target.id==='sheetBg') closeSheet(); });
+  document.addEventListener('keydown', (e)=>{ if(e.key==='Escape') closeSheet(); });
+
+  function openHalf(id){
+    const p = prod(id); const others = menu.filter(x=>x.half && x.id!==id);
+    openSheet(`<h3>${esc(p.name)}</h3>
+      <button class="primary" type="button" id="hFull">🍕 Sabor completo · ${fmt(p.price)}</button>
+      ${others.length ? `<label for="hSecond">O mitad y mitad con…</label>
+        <select id="hSecond"><option value="">— elige el otro sabor —</option>${others.map(o=>`<option value="${esc(o.id)}">${esc(o.name)} (${fmt(Math.max(o.price,p.price))})</option>`).join('')}</select>
+        <div class="hint">La mitad y mitad cuesta lo mismo que el sabor más caro.</div>
+        <button class="secondary" type="button" id="hHalf">🌗 Agregar mitad y mitad</button>` : ''}
+      <button class="secondary" type="button" id="hClose">Cancelar</button>`);
+    $('#hFull').onclick = ()=>{ addLine({ type:'entera', productId:id }); closeSheet(); };
+    if($('#hHalf')) $('#hHalf').onclick = ()=>{ const b = $('#hSecond').value; if(!b){ $('#hSecond').focus(); return; } addLine({ type:'mitad', a:id, b }); closeSheet(); };
+    $('#hClose').onclick = closeSheet;
+  }
+
+  function openCart(){
+    const type = mesa ? 'local' : me.type;
+    openSheet(`<h3>Mi pedido</h3>
+      <div id="lines">${cart.map((l,i)=>`<div class="line"><div class="grow"><div><b>${esc(lineName(l))}</b></div><div class="hint">${fmt(linePrice(l))} c/u</div></div>
+        <div class="qty"><button type="button" data-ld="${i}" aria-label="Quitar uno">−</button><b>${l.qty}</b><button type="button" data-li="${i}" aria-label="Agregar uno">+</button></div></div>`).join('')}</div>
+      <div class="tot"><span>Productos</span><span>${fmt(total())}</span></div>
+      ${mesa ? `<div class="banner">🍽️ Para <b>${esc(mesa)}</b></div>` : `
+        <label>¿Cómo lo quieres?</label>
+        <div class="seg"><button type="button" class="chip${type==='domicilio'?' on':''}" data-t="domicilio">🛵 Domicilio</button><button type="button" class="chip${type==='llevar'?' on':''}" data-t="llevar">🥡 Recoger en el local</button></div>`}
+      <form id="f" novalidate>
+        <label for="fName">Tu nombre *</label><input id="fName" autocomplete="name" maxlength="80" value="${esc(me.name)}">
+        ${mesa ? '' : `<label for="fWa">Tu usuario de WhatsApp</label><input id="fWa" autocapitalize="none" spellcheck="false" placeholder="@usuario" maxlength="31" value="${esc(me.waUser)}">
+        <label for="fPhone">Celular (opcional)</label><input id="fPhone" type="tel" inputmode="numeric" autocomplete="tel" placeholder="3001234567" maxlength="14" value="${esc(me.phone)}">
+        <div class="hint">Con tu usuario de WhatsApp o tu celular te avisamos cómo va el pedido.</div>`}
+        ${!mesa && type==='domicilio' ? `<label for="fAddr">Dirección *</label><input id="fAddr" autocomplete="street-address" maxlength="200" placeholder="Calle, número, barrio, apto e indicaciones" value="${esc(me.address)}">
+          <div class="hint">El valor del domicilio te lo confirmamos por WhatsApp.</div>` : ''}
+        <label for="fNote">Notas (opcional)</label><textarea id="fNote" maxlength="300" placeholder="Ej: sin cebolla, salsas aparte"></textarea>
+        <label for="fPay">¿Cómo vas a pagar?</label>
+        <select id="fPay"><option value="efectivo">Efectivo</option><option value="qr">Transferencia / QR</option><option value="datafono">Tarjeta (datáfono)</option></select>
+        <div class="hp" aria-hidden="true"><label for="fWeb">No llenar</label><input id="fWeb" tabindex="-1" autocomplete="off"></div>
+        <div class="err" id="fErr" role="alert"></div>
+        <button class="primary" type="submit" id="fSend">Enviar pedido · ${fmt(total())}</button>
+        <button class="secondary" type="button" id="fBack">Seguir viendo el menú</button>
+      </form>`);
+    $('#fPay').value = me.pay || 'efectivo';
+    $('#sheet').querySelectorAll('[data-li]').forEach(b=>b.onclick=()=>{ keep(); cart[+b.dataset.li].qty = Math.min(20, cart[+b.dataset.li].qty+1); render(); openCart(); });
+    $('#sheet').querySelectorAll('[data-ld]').forEach(b=>b.onclick=()=>{ keep(); const l = cart[+b.dataset.ld]; l.qty--; if(l.qty<=0) cart.splice(+b.dataset.ld,1); render(); if(cart.length) openCart(); else closeSheet(); });
+    $('#sheet').querySelectorAll('[data-t]').forEach(b=>b.onclick=()=>{ keep(); me.type = b.dataset.t; openCart(); });
+    $('#fBack').onclick = ()=>{ keep(); closeSheet(); };
+    $('#f').onsubmit = (e)=>{ e.preventDefault(); send(); };
+  }
+  function keep(){
+    const v = (id)=>{ const el = document.getElementById(id); return el ? el.value : null; };
+    if(v('fName')!==null) me.name = v('fName').trim();
+    if(v('fWa')!==null) me.waUser = v('fWa').trim();
+    if(v('fPhone')!==null) me.phone = v('fPhone').trim();
+    if(v('fAddr')!==null) me.address = v('fAddr').trim();
+    if(v('fPay')!==null) me.pay = v('fPay');
+    store.set('me', { name:me.name, waUser:me.waUser, phone:me.phone, address:me.address, type:me.type, pay:me.pay });
+  }
+  async function send(){
+    if(sending) return;
+    keep();
+    const err = (m, id)=>{ $('#fErr').textContent = m; if(id && document.getElementById(id)) document.getElementById(id).focus(); };
+    if($('#fWeb').value) return;  // robot
+    const type = mesa ? 'local' : me.type;
+    let wa = me.waUser.replace(/\s/g,'').toLowerCase(); if(wa && wa[0]!=='@') wa = '@'+wa;
+    const phone = me.phone.replace(/\D/g,'');
+    if(!me.name) return err('Escribe tu nombre.', 'fName');
+    if(type!=='local'){
+      if(wa && !/^@[a-z0-9._]{3,30}$/.test(wa)) return err('Tu usuario de WhatsApp empieza con @ y usa letras, números, punto o guion bajo.', 'fWa');
+      if(phone && !(phone.length===10 || (phone.length===12 && phone.startsWith('57')))) return err('El celular debe tener 10 dígitos.', 'fPhone');
+      if(!wa && !phone) return err('Escribe tu usuario de WhatsApp o tu celular para avisarte.', 'fWa');
+    }
+    if(type==='domicilio' && me.address.length < 6) return err('Escribe la dirección completa.', 'fAddr');
+    sending = true; const btn = $('#fSend'); btn.disabled = true; btn.textContent = 'Enviando…';
+    const payload = { type, spot: mesa, name: me.name, waUser: type==='local' ? '' : wa, phone: type==='local' ? '' : phone, address: type==='domicilio' ? me.address : '', note: $('#fNote').value.trim(), pay: me.pay,
+      items: cart.map(l=> l.type==='mitad' ? { type:'mitad', a:l.a, b:l.b, qty:l.qty } : { productId:l.productId, qty:l.qty }) };
+    const { data, error } = await sb.rpc('submit_web_order', { p: payload });
+    sending = false;
+    if(error){ btn.disabled = false; btn.textContent = `Enviar pedido · ${fmt(total())}`; return err(error.message || 'No se pudo enviar. Intenta de nuevo.'); }
+    done(data, payload);
+  }
+  function done(r, p){
+    const lines = (r.items||[]).map(i=>`- ${i.qty}x ${i.name} (${fmt(i.price*i.qty)})`).join('\n');
+    const where = p.type==='local' ? `En el local: ${p.spot}` : p.type==='llevar' ? 'Para recoger en el local' : `Domicilio a: ${p.address}`;
+    const payTxt = { efectivo:'Efectivo', qr:'Transferencia / QR', datafono:'Tarjeta' }[p.pay] || '';
+    const msg = `Hola Tomates Pizza 🍕, acabo de hacer el pedido #${r.short} en la página:\n${lines}\nProductos: ${fmt(r.subtotal)}\n${where}\nNombre: ${p.name}${p.waUser?'\nWhatsApp: '+p.waUser:''}${p.phone?'\nCelular: '+p.phone:''}\nPago: ${payTxt}${p.note?'\nNota: '+p.note:''}${p.type==='domicilio'?'\n¿Cuánto vale el domicilio?':''}`;
+    const wa = biz.whatsapp ? `https://wa.me/${encodeURIComponent(biz.whatsapp)}?text=${encodeURIComponent(msg)}` : '';
+    cart = []; render();
+    openSheet(`<div class="center"><div class="big">✅</div><h3>¡Pedido #${esc(r.short)} recibido!</h3>
+      <p>${p.type==='local' ? 'Ya lo estamos revisando. Te lo llevamos a la mesa.' : 'Ahora <b>envíalo por WhatsApp</b> para confirmarlo y coordinar el pago' + (p.type==='domicilio' ? ' y el valor del domicilio' : '') + '.'}</p></div>
+      ${wa && p.type!=='local' ? `<a class="primary wa center" style="display:flex;align-items:center;justify-content:center;text-decoration:none" href="${wa}" target="_blank" rel="noopener">💬 Enviar por WhatsApp</a>` : ''}
+      <button class="secondary" type="button" id="again">Hacer otro pedido</button>`);
+    $('#again').onclick = closeSheet;
+  }
+  load();
+})();
+</script>
+</body>
+</html>
