@@ -149,8 +149,14 @@ function onFreeDiscountInput(){
   orderDiscount.reason = r ? r.value.trim().slice(0,80) : '';
   updateOrderTotalPreview();
 }
+// Un descuento del 100% deja gratis también el domicilio (el negocio asume el pago al domiciliario)
+function deliveryDiscountFor(disc, fee){ return disc && disc.kind==='pct' && Number(disc.value)>=100 ? (Number(fee)||0) : 0; }
+function existingPaid(id){ const o = id && state.orders.find(x=>x.id===id); return !!(o && o.paymentStatus==='pagado' && o.paymentMethod!=='cortesia'); }
+// Lo que el cliente pagó por domicilio (para informes: es valor de paso)
+function deliveryCharged(o){ return Math.max(0, (Number(o.deliveryFee)||0) - (Number(o.deliveryDiscount)||0)); }
 function orderTotalBreakHtml(sub, dsc){
-  const fee = orderDeliveryFee||0;
+  const fee = orderDeliveryFee||0, dd = deliveryDiscountFor(orderDiscount, fee);
   if(!dsc && !fee) return '';
-  return 'Productos ' + fmt(sub) + (dsc ? ' · Descuento −' + fmt(dsc) : '') + (fee ? ' · Domicilio ' + fmt(fee) : '');
+  return 'Productos ' + fmt(sub) + (dsc ? ' · Descuento −' + fmt(dsc) : '') + (fee ? ' · Domicilio ' + fmt(fee) + (dd ? ' (gratis con el 100%)' : '') : '')
+    + (sub - dsc + fee - dd <= 0 ? ' · <b>Cortesía: no se cobra</b>' : '');
 }
