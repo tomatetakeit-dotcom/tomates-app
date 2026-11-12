@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Tomates Pizzería</title>
+<title>Tomates Pizza</title>
 <style>
   :root {
     --bg: #ffffff;
@@ -281,8 +281,14 @@ body.kds-wide main { max-width: 1500px; }
 .kds-kpis .kpi { padding:10px 12px; }
 .kds-kpis .kpi .v { font-size:20px; }
 
+/* Indicador de datos en vivo */
+.uc-live { color:#1a9b4b; font-size:11px; cursor:pointer; }
+.uc-live.off { color:var(--tm-red, #ff3035); animation:ucBlink 1s steps(2) infinite; }
+@keyframes ucBlink { 50% { opacity:.25; } }
+@media (prefers-reduced-motion: reduce){ .uc-live.off { animation:none; } }
+
   /* ==================================================================
-     Identidad Tomates Pizzería (guía web/PWA 1.0) — se carga después
+     Identidad Tomates Pizza (guía web/PWA 1.0) — se carga después
      de los estilos originales y solo redefine tokens y componentes.
      Rojo #FF3035 · Blanco #FFFFFF · Negro #111111. El rojo nunca lleva
      texto blanco pequeño; el texto rojo pequeño solo va sobre fondo oscuro.
@@ -398,7 +404,7 @@ body.kds-wide main { max-width: 1500px; }
     <img src="data:image/png;base64,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" alt="Tomates App" style="height:42px;width:auto;display:block;border-radius:8px">
   </div>
   <div>
-    <h1>Tomates Pizzería</h1>
+    <h1>Tomates Pizza</h1>
     <div class="sub" id="dbStatus">Conectando…</div>
   </div>
 </header>
@@ -577,6 +583,9 @@ body.kds-wide main { max-width: 1500px; }
     async rpc(fn, args){
       const { data, error } = await sb.rpc(fn, args||{});
       if(error) throw wrapErr(error);
+      // Funciones que cambian un pedido: se relee para verlo al instante en este equipo
+      if(args && args.p_order_id && TOM.refetchRow) TOM.refetchRow('orders', args.p_order_id);
+      if(fn==='approve_edit_request' && TOM.reloadTable){ TOM.reloadTable('orders'); TOM.reloadTable('edit_requests'); }
       return data;
     }
   };
@@ -613,11 +622,17 @@ body.kds-wide main { max-width: 1500px; }
     return out;
   }
 
+  /* ---------- Datos en vivo ----------
+     Cada tabla se carga completa y luego escucha cambios por Realtime. Si el equipo se
+     duerme, pierde internet o vence la sesión, el canal se cae sin avisar: por eso se
+     revisa la conexión al volver a la app, cada 30 s, y se recargan los datos. Además,
+     después de cada cambio hecho desde este equipo se relee esa fila de inmediato. */
   let chanSeq = 0;
+  const WATCHERS = {};          // tabla -> [{ rows, emit, mapRow, load, resub }]
   function watchTable(table, onRows, onErr, mapRow){
     const rows = new Map();
     const emit = ()=>{ try{ onRows([...rows.values()]); }catch(e){ console.error(e); } };
-    let alive = true;
+    let alive = true, ch = null;
     const load = async ()=>{
       try{
         const sel = table==='profiles'
@@ -629,18 +644,86 @@ body.kds-wide main { max-width: 1500px; }
         if(alive) emit();
       }catch(e){ onErr && onErr(e); }
     };
-    const ch = sb.channel('t_'+table+'_'+(++chanSeq))
-      .on('postgres_changes', { event:'*', schema:'public', table }, (p)=>{
-        if(p.eventType==='DELETE'){ const id = p.old && p.old.id; if(id!=null) rows.delete(id); }
-        else if(p.new && p.new.id!=null){ rows.set(p.new.id, mapRow(p.new)); }
-        emit();
-      })
-      .subscribe((status)=>{ if(status==='SUBSCRIBED') load(); });
+    const subscribe = ()=>{
+      if(ch){ try{ sb.removeChannel(ch); }catch(e){} }
+      ch = sb.channel('t_'+table+'_'+(++chanSeq))
+        .on('postgres_changes', { event:'*', schema:'public', table }, (p)=>{
+          if(p.eventType==='DELETE'){ const id = p.old && p.old.id; if(id!=null) rows.delete(id); }
+          else if(p.new && p.new.id!=null){ rows.set(p.new.id, mapRow(p.new)); }
+          emit();
+        })
+        .subscribe((status)=>{ if(status==='SUBSCRIBED') load(); setLive(); });
+      w.ch = ch;
+    };
+    const w = { rows, emit, mapRow, load, resub: subscribe, ch:null, get alive(){ return alive; } };
+    (WATCHERS[table] = WATCHERS[table] || []).push(w);
+    subscribe();
     load();
     TOM._reloaders = TOM._reloaders || [];
     TOM._reloaders.push(load);
     return ()=>{ alive=false; try{ sb.removeChannel(ch); }catch(e){} };
   }
+  // Aplica una fila nueva o actualizada (o la borra si row es null) en todas las vistas
+  function applyRow(table, id, row){
+    (WATCHERS[table]||[]).forEach(w=>{
+      if(!w.alive) return;
+      if(row) w.rows.set(id, w.mapRow(row)); else w.rows.delete(id);
+      w.emit();
+    });
+  }
+  async function refetchRow(table, id){
+    if(!WATCHERS[table] || id==null) return;
+    try{
+      const { data } = await sb.from(table).select('id,data,created_at').eq('id', id).maybeSingle();
+      applyRow(table, id, data || null);
+    }catch(e){}
+  }
+  TOM.refetchRow = refetchRow;
+  TOM.reloadTable = (table)=> Promise.all((WATCHERS[table]||[]).filter(w=>w.alive).map(w=>w.load()));
+
+  // Estado de la conexión en vivo
+  let lastLive = null;
+  function isLive(){
+    const rt = sb.realtime;
+    if(!rt || typeof rt.isConnected!=='function') return true;
+    if(!rt.isConnected()) return false;
+    const all = Object.values(WATCHERS).flat().filter(w=>w.alive && w.ch);
+    return all.every(w=>w.ch.state==='joined');
+  }
+  function setLive(){
+    const v = isLive();
+    if(v!==lastLive){ lastLive = v; TOM.live = v; try{ window.dispatchEvent(new CustomEvent('tomates:live', { detail:v })); }catch(e){} }
+  }
+  let resyncing = false, lastResync = 0;
+  async function resync(force){
+    if(resyncing || !TOM.user) return;
+    if(!force && Date.now()-lastResync < 5000) return;
+    resyncing = true; lastResync = Date.now();
+    try{
+      const { data } = await sb.auth.getSession();          // renueva la sesión si venció
+      const token = data && data.session && data.session.access_token;
+      if(token && sb.realtime && sb.realtime.setAuth) sb.realtime.setAuth(token);
+      if(sb.realtime && sb.realtime.isConnected && !sb.realtime.isConnected()) sb.realtime.connect();
+      Object.values(WATCHERS).flat().filter(w=>w.alive && (!w.ch || w.ch.state!=='joined')).forEach(w=>w.resub());
+      await Promise.all(Object.values(WATCHERS).flat().filter(w=>w.alive).map(w=>w.load()));
+    }catch(e){ console.warn('resync', e); }
+    finally{ resyncing = false; setLive(); }
+  }
+  TOM.resync = resync;
+  sb.auth.onAuthStateChange((ev, session)=>{
+    if(session && session.access_token && (ev==='TOKEN_REFRESHED' || ev==='SIGNED_IN') && sb.realtime && sb.realtime.setAuth) sb.realtime.setAuth(session.access_token);
+  });
+  document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='visible') resync(); });
+  window.addEventListener('focus', ()=>resync());
+  window.addEventListener('online', ()=>resync(true));
+  window.addEventListener('pageshow', (e)=>{ if(e.persisted) resync(true); });
+  setInterval(()=>{
+    if(document.visibilityState!=='visible' || !TOM.user) return;
+    setLive();
+    if(!isLive()) resync(true);
+  }, 30000);
+  // Red de seguridad: los pedidos se releen cada minuto mientras la app está a la vista
+  setInterval(()=>{ if(document.visibilityState==='visible' && TOM.user && WATCHERS.orders) TOM.reloadTable('orders'); }, 60000);
 
   function rolesCollection(){
     return {
@@ -663,16 +746,16 @@ body.kds-wide main { max-width: 1500px; }
     const docRef = (id)=>({
       id,
       async get(){ const { data, error } = await sb.from(table).select('data').eq('id', id).maybeSingle(); if(error) throw wrapErr(error); return snapDoc(id, data ? data.data : undefined); },
-      async set(obj){ const { error } = await sb.from(table).upsert({ id, data: obj }); if(error) throw wrapErr(error); },
-      async update(patch){ await TOM.rpc('merge_doc', { p_table: table, p_id: id, p_patch: patch }); },
-      async delete(){ const { error } = await sb.from(table).delete().eq('id', id); if(error) throw wrapErr(error); },
+      async set(obj){ const { error } = await sb.from(table).upsert({ id, data: obj }); if(error) throw wrapErr(error); refetchRow(table, id); },
+      async update(patch){ await TOM.rpc('merge_doc', { p_table: table, p_id: id, p_patch: patch }); refetchRow(table, id); },
+      async delete(){ const { error } = await sb.from(table).delete().eq('id', id); if(error) throw wrapErr(error); applyRow(table, id, null); },
       onSnapshot(cb, err){
         return watchTable(table, rows=>{ const r = rows.find(x=>x.id===id); cb(snapDoc(id, r ? r.data : undefined)); }, err, r=>({ id:r.id, data:r.data }));
       }
     });
     return {
       doc: docRef,
-      async add(obj){ const { data, error } = await sb.from(table).insert({ data: obj }).select('id').single(); if(error) throw wrapErr(error); return docRef(data.id); },
+      async add(obj){ const { data, error } = await sb.from(table).insert({ data: obj }).select('id').single(); if(error) throw wrapErr(error); refetchRow(table, data.id); return docRef(data.id); },
       onSnapshot(cb, err){ return watchTable(table, rows=>cb({ docs: rows.map(r=>snapDoc(r.id, r.data)) }), err, r=>({ id:r.id, data:r.data })); },
       orderBy(){ return this; }
     };
@@ -1076,7 +1159,7 @@ function renderOrders(){
       ${o.orderType==='llevar' ? `<div class="item-meta" style="color:var(--fg);font-weight:700">🥡 Para llevar (recoge en el local)</div>`:''}
       ${o.orderType==='domicilio' && o.customerAddress ? `<div class="item-meta" style="color:var(--fg)">📍 ${esc(o.customerAddress)}${o.customerWaUser?' · 💬 '+esc(o.customerWaUser):''}${o.customerPhone?' · 📱 '+esc(phoneLast10(o.customerPhone)):''}</div>`:''}
       ${o.deliveryFee? `<div class="item-meta">🛵 Domicilio: ${fmt(o.deliveryFee)}${o.deliveryService?' · '+esc(o.deliveryService):''}</div>`:''}
-      ${o.discountAmount>0 ? `<div class="item-meta">🏷️ ${esc((o.discount&&o.discount.name)||'Descuento')}: −${fmt(o.discountAmount)}</div>`:''}
+      ${o.discountAmount>0 ? `<div class="item-meta">🏷️ ${esc((o.discount&&o.discount.name)||'Descuento')}: −${fmt(o.discountAmount)}${o.deliveryDiscount>0 ? ' · domicilio gratis (−'+fmt(o.deliveryDiscount)+')' : ''}</div>`:''}
       ${timeline}
       <div class="row" style="margin-top:8px">
         <div class="item-name" style="font-size:15px">${fmt(o.total)}</div>
@@ -1320,13 +1403,13 @@ function updateOrderTotalPreview(){
   const cartTotal = orderCart.reduce((s,l)=>s+l.price*l.qty,0);
   const el = document.getElementById('orderTotalPreview');
   const dsc = discountAmountFor(orderDiscount, cartTotal);
-  if(el) el.textContent = fmt(cartTotal - dsc + (orderDeliveryFee||0));
+  if(el) el.textContent = fmt(cartTotal - dsc + (orderDeliveryFee||0) - deliveryDiscountFor(orderDiscount, orderDeliveryFee));
   const br = document.getElementById('orderTotalBreak'); if(br) br.innerHTML = orderTotalBreakHtml(cartTotal, dsc);
 }
 
 function renderOrderMainScreen(){
   const cartTotal = orderCart.reduce((s,l)=>s+l.price*l.qty,0);
-  const total = cartTotal - discountAmountFor(orderDiscount, cartTotal) + (orderDeliveryFee||0);
+  const total = cartTotal - discountAmountFor(orderDiscount, cartTotal) + (orderDeliveryFee||0) - deliveryDiscountFor(orderDiscount, orderDeliveryFee);
 
   let backButtonHtml = '';
   let gridHtml;
@@ -1580,15 +1663,18 @@ async function saveOrder(){
   const discount = orderDiscount && discountAmount>0 ? { promoId: orderDiscount.promoId||'',
       name: orderDiscount.promoId ? orderDiscount.name : ('Descuento libre' + (orderDiscount.reason ? ': '+orderDiscount.reason : '')),
       kind: orderDiscount.kind, value: Number(orderDiscount.value), amount: discountAmount, by: myUid } : null;
-  const total = subtotal - discountAmount + deliveryFee;
+  const deliveryDiscount = discount ? deliveryDiscountFor(orderDiscount, deliveryFee) : 0;
+  const total = Math.max(0, subtotal - discountAmount + deliveryFee - deliveryDiscount);
+  // Pedido en $0 (100% de descuento): queda como cortesía y no pasa por cobro
+  const courtesy = total<=0 ? { paymentStatus:'pagado', paymentMethod:'cortesia', paymentMethodLabel:'Cortesía (100% descuento)', paymentAmount:0, paidAt:Date.now(), paidDate:todayStr() } : {};
 
   if(editingOrderId){
     if(can('ventas.editar')){
-      await db.collection('orders').doc(editingOrderId).update({ items, total, subtotal, discount, discountAmount, deliveryFee, deliveryService, ...placeFields, ...custFields });
+      await db.collection('orders').doc(editingOrderId).update({ items, total, subtotal, discount, discountAmount, deliveryDiscount, deliveryFee, deliveryService, ...placeFields, ...custFields, ...(existingPaid(editingOrderId) ? {} : courtesy) });
     } else {
       const mine = state.roles.find(r=>r.id===myUid);
       await db.collection('editRequests').add({
-        orderId: editingOrderId, proposedItems: items, proposedTotal: total, proposedDeliveryFee: deliveryFee, proposedDeliveryService: deliveryService, proposedPlace: placeFields, proposedCustomer: custFields, proposedDiscount: discount,
+        orderId: editingOrderId, proposedItems: items, proposedTotal: total, proposedDeliveryFee: deliveryFee, proposedDeliveryService: deliveryService, proposedPlace: placeFields, proposedCustomer: custFields, proposedDiscount: discount, proposedDeliveryDiscount: deliveryDiscount,
         requestedBy: myUid, requestedByName: (mine&&mine.name)||'Cajero',
         status:'pendiente', createdAt: Date.now(),
       });
@@ -1613,7 +1699,7 @@ async function saveOrder(){
     if(c){ customerId = c.id; customerName = c.name; customerPhone = c.phone||''; }
   }
   if(dom){ customerId = custFields.customerId; customerName = dom.name; customerPhone = dom.phone; }
-  await db.collection('orders').add({ date: todayStr(), items, total, deliveryFee, deliveryService, status:'pendiente', createdAt: Date.now(), customerId, customerName, customerPhone, customerAddress: dom ? dom.address : '', customerWaUser: dom ? dom.waUser : '', subtotal, discount, discountAmount, ...placeFields });
+  await db.collection('orders').add({ date: todayStr(), items, total, deliveryFee, deliveryService, status:'pendiente', createdAt: Date.now(), customerId, customerName, customerPhone, customerAddress: dom ? dom.address : '', customerWaUser: dom ? dom.waUser : '', subtotal, discount, discountAmount, deliveryDiscount, ...courtesy, ...placeFields });
   orderCart = [];
   orderDeliveryFee = 0;
   orderDeliveryManual = false; orderDeliveryService = '';
@@ -2797,7 +2883,7 @@ function renderReports(){
     <div class="card">
       <div class="item-name" style="margin-bottom:8px">🛵 Domicilios</div>
       ${(()=>{
-        const cobrados = ordersInRange.reduce((s,o)=>s+(o.deliveryFee||0),0);
+        const cobrados = ordersInRange.reduce((s,o)=>s+deliveryCharged(o),0);
         const pagadosExp = expensesInRange.filter(e=>e.category==='Domicilios');
         const pagados = pagadosExp.reduce((s,e)=>s+(e.amount||0),0);
         const porTramo = {};
@@ -3113,7 +3199,7 @@ function renderHistResults(){
   const delivered = state.orders.filter(o=>o.status==='entregado');
   const cur = delivered.filter(o=>inRange(o.date, from, to));
   const prv = delivered.filter(o=>inRange(o.date, prev.from, prev.to));
-  const net = o => (o.total||0) - (o.deliveryFee||0);
+  const net = o => (o.total||0) - deliveryCharged(o);
   const sumBy = (arr, f) => arr.reduce((s,o)=>s+f(o), 0);
   const titleHtml = `<div class="item-name" style="margin-bottom:8px">${histLabel(histPeriod, val)}</div>`;
   if(cur.length===0){
@@ -3125,7 +3211,7 @@ function renderHistResults(){
   const ventasPrev = sumBy(prv, net);
   const nPedidos = cur.length;
   const ticket = ventas / nPedidos;
-  const domicilios = sumBy(cur, o=>o.deliveryFee||0);
+  const domicilios = sumBy(cur, o=>deliveryCharged(o));
   const nDomicilios = cur.filter(o=>o.deliveryFee).length;
   const pct = ventasPrev>0 ? ((ventas-ventasPrev)/ventasPrev)*100 : null;
   const prevWord = histPeriod==='dia' ? 'Día anterior' : histPeriod==='mes' ? 'Mes anterior' : 'Año anterior';
@@ -3679,8 +3765,8 @@ function renderPnL(){
   const to = `${monthVal}-${String(lastDay).padStart(2,'0')}`;
 
   const ordersInRange = state.orders.filter(o=>o.status==='entregado' && inRange(o.date, from, to));
-  const ingresos = ordersInRange.reduce((s,o)=>s+((o.total||0)-(o.deliveryFee||0)),0);
-  const domiciliosCobrados = ordersInRange.reduce((s,o)=>s+(o.deliveryFee||0),0);
+  const ingresos = ordersInRange.reduce((s,o)=>s+((o.total||0)-deliveryCharged(o)),0);
+  const domiciliosCobrados = ordersInRange.reduce((s,o)=>s+deliveryCharged(o),0);
   const domiciliosPagados = state.expenses.filter(e=>inRange(e.date, from, to) && e.category==='Domicilios').reduce((s,e)=>s+(e.amount||0),0);
 
   let cogs = 0;
@@ -3889,7 +3975,7 @@ initDb();
 
     (state.orders||[]).filter(o=>o.status==='entregado' && o.date && o.date>=from && o.date<=to).forEach(o=>{
       const b = B[keyOf(o.date)]; if(!b) return;
-      b.orders += 1; b.sales += (o.total||0) - (o.deliveryFee||0);
+      b.orders += 1; b.sales += (o.total||0) - deliveryCharged(o);
       (o.items||[]).forEach(it=>{
         const q = it.qty||0, price = (it.price||0)*q;
         if(it.type==='mitad'){
@@ -3910,14 +3996,14 @@ initDb();
     const byType = {}; TYPES.forEach(([k])=> byType[k] = { n:0, sales:0 });
     const spots = {};
     (state.orders||[]).filter(o=>o.status==='entregado' && o.date && o.date>=from && o.date<=to).forEach(o=>{
-      const t = byType[typeOf(o)]; t.n += 1; t.sales += (o.total||0) - (o.deliveryFee||0);
+      const t = byType[typeOf(o)]; t.n += 1; t.sales += (o.total||0) - deliveryCharged(o);
       if(o.orderType==='local' && o.spot){ const sp = spots[o.spot] = spots[o.spot] || { n:0, sales:0 }; sp.n += 1; sp.sales += (o.total||0); }
     });
     // Descuentos y promociones
     const promoAgg = {}; let discTotal = 0, discOrders = 0;
     (state.orders||[]).filter(o=>o.status==='entregado' && o.date && o.date>=from && o.date<=to && o.discountAmount>0).forEach(o=>{
       const k = (o.discount && o.discount.name) || 'Descuento'; const a = promoAgg[k] = promoAgg[k] || { n:0, amount:0, sales:0 };
-      a.n += 1; a.amount += o.discountAmount; a.sales += (o.total||0) - (o.deliveryFee||0); discTotal += o.discountAmount; discOrders += 1;
+      a.n += 1; a.amount += o.discountAmount + (o.deliveryDiscount||0); a.sales += (o.total||0) - deliveryCharged(o); discTotal += o.discountAmount + (o.deliveryDiscount||0); discOrders += 1;
     });
     const typeRows = TYPES.filter(([k])=> k!=='otro' || byType.otro.n>0).map(([k,l])=>({ k, l, ...byType[k] }));
     // Tiempos de cocina (promedios por periodo)
@@ -4367,10 +4453,16 @@ function onFreeDiscountInput(){
   orderDiscount.reason = r ? r.value.trim().slice(0,80) : '';
   updateOrderTotalPreview();
 }
+// Un descuento del 100% deja gratis también el domicilio (el negocio asume el pago al domiciliario)
+function deliveryDiscountFor(disc, fee){ return disc && disc.kind==='pct' && Number(disc.value)>=100 ? (Number(fee)||0) : 0; }
+function existingPaid(id){ const o = id && state.orders.find(x=>x.id===id); return !!(o && o.paymentStatus==='pagado' && o.paymentMethod!=='cortesia'); }
+// Lo que el cliente pagó por domicilio (para informes: es valor de paso)
+function deliveryCharged(o){ return Math.max(0, (Number(o.deliveryFee)||0) - (Number(o.deliveryDiscount)||0)); }
 function orderTotalBreakHtml(sub, dsc){
-  const fee = orderDeliveryFee||0;
+  const fee = orderDeliveryFee||0, dd = deliveryDiscountFor(orderDiscount, fee);
   if(!dsc && !fee) return '';
-  return 'Productos ' + fmt(sub) + (dsc ? ' · Descuento −' + fmt(dsc) : '') + (fee ? ' · Domicilio ' + fmt(fee) : '');
+  return 'Productos ' + fmt(sub) + (dsc ? ' · Descuento −' + fmt(dsc) : '') + (fee ? ' · Domicilio ' + fmt(fee) + (dd ? ' (gratis con el 100%)' : '') : '')
+    + (sub - dsc + fee - dd <= 0 ? ' · <b>Cortesía: no se cobra</b>' : '');
 }
 
 </script>
@@ -4405,6 +4497,7 @@ function orderTotalBreakHtml(sub, dsc){
 
   window.paymentBadgeHtml = function(o){
     const cobrar = `<button class="secondary" style="width:auto;padding:6px 12px;font-size:12.5px" onclick="openCobroModal('${o.id}')">💰 Cobrar</button>`;
+    if(o.paymentMethod==='cortesia' || (!(Number(o.total)>0) && (o.items||[]).length && o.paymentStatus!=='pagado')) return `<span class="pill good">🎁 Cortesía · sin cobro</span>`;
     if(o.paymentStatus==='pagado') return `<span class="pill good">Pagado · ${escH(o.paymentMethodLabel||'')}</span>`;
     if(o.paymentStatus==='por_confirmar') return `<span style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end">
         <span class="pill warn">⏳ QR por confirmar</span>
@@ -4780,7 +4873,7 @@ function orderTotalBreakHtml(sub, dsc){
   gate.innerHTML = `<div class="auth-card"><div id="authBody"><div class="item-meta">Cargando…</div></div></div>`;
   document.body.appendChild(gate);
   const body = ()=>$('#authBody');
-  const logo = ()=> `<img src="brand/logo/tomates-logo-440.webp" width="200" height="200" alt="Tomates Pizzería" class="auth-logo">`;
+  const logo = ()=> `<img src="brand/logo/tomates-logo-440.webp" width="200" height="200" alt="Tomates Pizza" class="auth-logo">`;
 
   function showLogin(msg){
     gate.hidden = false;
@@ -4892,9 +4985,14 @@ function orderTotalBreakHtml(sub, dsc){
     const chip = document.createElement('div');
     chip.id = 'userChip';
     chip.innerHTML = `<div class="uc-name">${escH(TOM.profile.name || usernameOf(TOM.user.email) || TOM.user.email)}</div>
-      <div class="uc-role">${escH(ROLE_LABEL[TOM.profile.role]||TOM.profile.role)}</div>
+      <div class="uc-role"><span id="liveDot" class="uc-live" title="Datos en vivo">●</span> ${escH(ROLE_LABEL[TOM.profile.role]||TOM.profile.role)}</div>
       <button class="ghost uc-out" type="button" onclick="tomatesLogout()">Salir</button>`;
     h.appendChild(chip);
+    const paint = (on)=>{ const d = document.getElementById('liveDot'); if(!d) return;
+      d.classList.toggle('off', on===false); d.title = on===false ? 'Reconectando… toca para actualizar' : 'Datos en vivo'; };
+    paint(TOM.live);
+    window.addEventListener('tomates:live', (e)=>paint(e.detail));
+    document.getElementById('liveDot').addEventListener('click', ()=>{ TOM.resync && TOM.resync(true); toast('Actualizando datos…', 'ok'); });
   }
 
   sb.auth.onAuthStateChange((event)=>{
