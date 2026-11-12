@@ -381,6 +381,22 @@ s = rep(s, "      : '<span class=\"pill warn\">En cocina</span>';",
 # Costo por unidad con decimales (los insumos se costean por gramo)
 s = rep(s, "Costo unit.: ${fmt(i.currentCost||0)}", "Costo: ${fmtCost(i.currentCost||0)} por ${i.unit}")
 
+
+# v10: pedidos web por confirmar y avisos por WhatsApp
+s = rep(s, "const cookingCount = orders.filter(o=>o.status!=='entregado' && o.status!=='listo').length;",
+           "const cookingCount = orders.filter(o=>o.status!=='entregado' && o.status!=='listo' && o.webStatus!=='por_confirmar').length;")
+s = rep(s, "      ${st==='pendiente' ? `<div class=\"row\" style=\"margin-top:8px;gap:8px\">\n          <button class=\"primary\" style=\"flex:1;padding:11px\" onclick=\"setOrderStatus('${o.id}','listo')\">",
+           "      ${o.webStatus==='por_confirmar' ? webOrderButtonsHtml(o) : st==='pendiente' ? `<div class=\"row\" style=\"margin-top:8px;gap:8px\">\n          <button class=\"primary\" style=\"flex:1;padding:11px\" onclick=\"setOrderStatus('${o.id}','listo')\">")
+s = rep(s, "${st!=='entregado' ? (myPendingRequest", "${st!=='entregado' && o.webStatus!=='por_confirmar' ? (myPendingRequest")
+s = rep(s, "        ${o.customerPhone? `<button class=\"ghost\" onclick=\"sendOrderWhatsApp('${o.id}')\">📲 WhatsApp</button>`:''}",
+           "        ${(o.customerPhone||o.customerWaUser)? `<button class=\"ghost\" onclick=\"sendOrderWhatsApp('${o.id}')\">📲 Avisar</button>`:''}")
+s = rep(s, "    const pill = st==='entregado' ? '<span class=\"pill good\">Entregado</span>'",
+           "    const pill = o.webStatus==='por_confirmar' ? '<span class=\"pill warn\">🌐 Web · por confirmar</span>' : st==='entregado' ? '<span class=\"pill good\">Entregado</span>'")
+s = rep(s, "      ${timeline}\n      <div class=\"row\" style=\"margin-top:8px\">\n        <div class=\"item-name\" style=\"font-size:15px\">${fmt(o.total)}</div>",
+           "      ${webOrderInfoHtml(o)}\n      ${timeline}\n      <div class=\"row\" style=\"margin-top:8px\">\n        <div class=\"item-name\" style=\"font-size:15px\">${fmt(o.total)}</div>")
+s = rep(s, "      if(st==='pendiente') parts.push('⏱ '+fmtDur(nowMs-o.createdAt)+' en cocina');",
+           "      if(st==='pendiente' && o.webStatus==='por_confirmar') parts.push('⏱ '+fmtDur(nowMs-o.createdAt)+' esperando confirmación');\n      else if(st==='pendiente') parts.push('⏱ '+fmtDur(nowMs-(o.confirmedAt||o.createdAt))+' en cocina');")
+
 # 2) Estilos de acceso, chip de usuario y matriz de permisos
 css = (here / "auth.css").read_text(encoding="utf-8") + "\n" + (here / "brand.css").read_text(encoding="utf-8")
 head_extra = """<meta name="theme-color" content="#FF3035">
@@ -410,7 +426,7 @@ else:
     s = rep(s, marker, marker + "\n" + pre)
 post = "<script>\n" + (here / "analysis.js").read_text(encoding="utf-8") + "\n</script>\n"
 post += "<script>\n" + (here / "kitchen.js").read_text(encoding="utf-8") + "\n</script>\n"
-for extra_js in ("promos.js", "payments.js", "invoices.js"):
+for extra_js in ("promos.js", "payments.js", "invoices.js", "whatsapp.js"):
     post += "<script>\n" + (here / extra_js).read_text(encoding="utf-8") + "\n</script>\n"
 post += "<script>\n" + (here / "auth.js").read_text(encoding="utf-8") + "\n</script>\n"
 post += "<script>\n" + (here / "history.js").read_text(encoding="utf-8") + "\n</script>\n"
