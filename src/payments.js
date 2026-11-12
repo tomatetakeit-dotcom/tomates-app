@@ -28,6 +28,7 @@
 
   window.paymentBadgeHtml = function(o){
     const cobrar = `<button class="secondary" style="width:auto;padding:6px 12px;font-size:12.5px" onclick="openCobroModal('${o.id}')">💰 Cobrar</button>`;
+    if(o.paymentMethod==='cortesia' || (!(Number(o.total)>0) && (o.items||[]).length && o.paymentStatus!=='pagado')) return `<span class="pill good">🎁 Cortesía · sin cobro</span>`;
     if(o.paymentStatus==='pagado') return `<span class="pill good">Pagado · ${escH(o.paymentMethodLabel||'')}</span>`;
     if(o.paymentStatus==='por_confirmar') return `<span style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end">
         <span class="pill warn">⏳ QR por confirmar</span>
