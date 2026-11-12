@@ -29,6 +29,7 @@ App web instalable (PWA) para ventas, cocina, caja, inventario, costeo, clientes
 9. `supabase/09_cocina.sql` — rol **cocina**, permisos `cocina.ver` / `cocina.operar`, lectura de pedidos recientes para cocina y `set_kitchen_stage` (preparación → horno → listo, con hora de cada paso). Volver a desplegar la función `invite-user` (acepta el rol cocina).
 10. `supabase/10_promos_pagos_facturas.sql` — clientes por celular, **@usuario de WhatsApp** o dirección (`upsert_customer` de 4 datos); **promociones** (`promotions`) y regla de descuentos; **pagos QR** con comprobante (`confirm_qr_payment`, permiso `pagos.confirmar`); buckets privados `comprobantes` y `facturas`; tabla `invoices`.
 11. `supabase/11_cortesia_domicilio.sql` — descuento del 100% deja gratis también el domicilio (`deliveryDiscount`); pedidos en $0 quedan como cortesía sin cobro.
+12. `supabase/12_pedidos_web.sql` — pedidos desde la página pública `menu.html` (`public_menu`, `submit_web_order` para visitantes; `confirm_web_order` para el equipo). Los ajustes viven en `config/web` (WhatsApp, abierto/cerrado, mensaje, categorías ocultas).
 
 Funciones (Edge Functions): `invite-user` (invitar por correo, crear usuario sin correo, poner contraseña temporal) y `read-invoice` (lee facturas con IA; necesita el secreto `ANTHROPIC_API_KEY`, opcional `ANTHROPIC_MODEL`).
 
@@ -38,7 +39,7 @@ Registro libre desactivado: solo entran personas invitadas por el administrador.
 
 ## Publicar en Render
 
-- Build command: `rm -rf dist && mkdir -p dist && cp index.html manifest.webmanifest sw.js dist/ && base64 -d brand.tgz.b64 | tar -xzf - -C dist && ls -R dist`
+- Build command: `rm -rf dist && mkdir -p dist && cp index.html menu.html manifest.webmanifest sw.js dist/ && base64 -d brand.tgz.b64 | tar -xzf - -C dist && ls -R dist`
 - Publish directory: `dist`
 - Header: `/manifest.webmanifest` → `Content-Type: application/manifest+json`
 - El repositorio está conectado como repositorio público: después de cada cambio hay que hacer **Manual Deploy → Deploy latest commit**.
