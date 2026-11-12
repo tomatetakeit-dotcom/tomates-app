@@ -7,7 +7,7 @@
     domiciliario: ['domicilios.ver','domicilios.entregar','ventas.cobrar'],
     cocina: ['cocina.ver','cocina.operar'],
   };
-  const ALL = [...new Set(Object.values(PERMS).flat().concat(['menu.gestionar','usuarios.gestionar','registros.eliminar','config.gestionar','analisis.ver','cocina.ver','cocina.operar']))];
+  const ALL = [...new Set(Object.values(PERMS).flat().concat(['menu.gestionar','usuarios.gestionar','registros.eliminar','config.gestionar','analisis.ver','cocina.ver','cocina.operar','promos.gestionar','ventas.descuento_libre','pagos.confirmar']))];
   const today = (()=>{ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); })();
   const T = window.__MOCK_TABLES__ = {
     profiles: [
@@ -20,7 +20,7 @@
                    { id:'queso', data:{ name:'Queso', unit:'g', stock:3000, currentCost:20 } } ],
     recipes: [ { id:'r1', data:{ name:'Pizza muzza', yieldQty:1, items:[{ingredientId:'harina',qty:250},{ingredientId:'queso',qty:150}] } } ],
     products: [ { id:'p1', data:{ name:'Muzzarella', category:'Pizzas', price:32000, recipeId:'r1' } } ],
-    categories: [], expenses: [], pending_expenses: [], counts: [], customers: [ { id:'c1', data:{ name:'Ana', phone:'3001112233', notes:'' } } ],
+    categories: [ { id:'cat1', data:{ scope:'gastos', name:'Empaques', subcategories:[] } } ], expenses: [], pending_expenses: [], counts: [], customers: [ { id:'c1', data:{ name:'Ana', phone:'3001112233', notes:'' } } ],
     edit_requests: [], cash_register: [], cash_movements: [], config: [],
     purchases: [ { id:'pu1', data:{ ingredientId:'harina', ingredientName:'Harina', qty:5000, totalCost:22000, unitCost:4.4, date:'2026-10-05', provider:'Molino Z' } },
                  { id:'pu2', data:{ ingredientId:'queso', ingredientName:'Queso', qty:2000, totalCost:40000, unitCost:20, date:'2026-10-20' } },
@@ -32,6 +32,9 @@
       { id:'h2', ingredient_id:'harina', cost:4.4, previous_cost:4, source:'compra', effective_date:'2026-10-05', note:'Molino Z', changed_by:'u-admin', created_at:'2026-10-05T10:00:00Z' },
       { id:'h3', ingredient_id:'harina', cost:5, previous_cost:4.4, source:'manual', effective_date:'2026-10-28', note:'Alza proveedor', changed_by:'u-admin', created_at:'2026-10-28T10:00:00Z' },
       { id:'h4', ingredient_id:'queso', cost:20, previous_cost:null, source:'inicial', effective_date:'2026-09-01', note:'Costo inicial', changed_by:null, created_at:'2026-09-01T10:00:00Z' } ],
+    promotions: [ { id:'pr1', name:'Martes 10%', kind:'pct', value:10, active:true, starts_on:null, ends_on:null, weekdays:[], note:'', created_at:'1' },
+                  { id:'pr2', name:'Vieja', kind:'fixed', value:5000, active:false, starts_on:null, ends_on:null, weekdays:[], note:'', created_at:'2' } ],
+    invoices: [],
     invitations: [ { email:'nuevo@test', name:'Nuevo', phone:'', role:'domiciliario', accepted_at:null, created_at:'3' } ],
     permissions: ALL.map((k,i)=>({ key:k, module:k.split('.')[0], label:k, sort:i })),
     role_permissions: Object.entries(PERMS).flatMap(([r,ps])=>ps.map(p=>({ role:r, permission:p }))),
@@ -59,6 +62,7 @@
       maybeSingle(){ single='maybe'; return b; }, single(){ single='one'; return b; },
       insert(obj){ op='insert'; payload=obj; return b; },
       upsert(obj){ op='upsert'; payload=obj; return b; },
+      update(obj){ op='update'; payload=obj; return b; },
       delete(){ op='delete'; return b; },
       then(res, rej){ return Promise.resolve(run()).then(res, rej); }
     };
@@ -75,6 +79,10 @@
         const i = list.findIndex(r=>r[key]===payload[key]);
         if(i>=0){ list[i] = Object.assign(list[i], clone(payload)); notify(table,'UPDATE',list[i]); }
         else { const r = Object.assign({ created_at:String(Date.now()) }, clone(payload)); list.push(r); notify(table,'INSERT',r); }
+        return { data:null, error:null };
+      }
+      if(op==='update'){
+        list.filter(r=>filters.every(f=>f(r))).forEach(r=>{ Object.assign(r, clone(payload)); notify(table,'UPDATE',r); });
         return { data:null, error:null };
       }
       if(op==='delete'){
@@ -95,11 +103,16 @@
     touch_last_seen(){ const p=me(); p.last_seen_at = new Date().toISOString(); return null; },
     merge_doc({p_table,p_id,p_patch}){ const r=T[p_table].find(x=>x.id===p_id); if(!r) throw {message:'No tienes permiso o el registro no existe', code:'42501'}; Object.assign(r.data,p_patch); notify(p_table,'UPDATE',r); return null; },
     set_order_status({p_order_id,p_status}){ const r=T.orders.find(x=>x.id===p_order_id); r.data.status=p_status; if(p_status==='listo') r.data.readyAt=Date.now(); if(p_status==='entregado') r.data.deliveredAt=Date.now(); notify('orders','UPDATE',r); return r.data; },
-    upsert_customer({p_phone,p_name,p_address}){ let d=String(p_phone||'').replace(/\D/g,''); if(d.length===10) d='57'+d; if(!(d.length===12&&d.startsWith('57'))) throw {message:'Celular inválido: deben ser 10 dígitos'};
-      const k=d.slice(-10); let r=T.customers.find(x=>String(x.data.phone||'').replace(/\D/g,'').slice(-10)===k);
-      if(r){ Object.assign(r.data,{name:p_name,phone:d,address:p_address}); notify('customers','UPDATE',r); }
-      else { r={id:'c'+Date.now(),data:{name:p_name,phone:d,address:p_address,notes:''},created_at:String(Date.now())}; T.customers.push(r); notify('customers','INSERT',r); }
+    upsert_customer({p_phone,p_wa_user,p_name,p_address}){ let d=String(p_phone||'').replace(/\D/g,''); if(d){ if(d.length===10) d='57'+d; if(!(d.length===12&&d.startsWith('57'))) throw {message:'Celular inválido: deben ser 10 dígitos'}; }
+      let w=String(p_wa_user||'').replace(/\s/g,'').toLowerCase(); if(w){ if(w[0]!=='@') w='@'+w; if(!/^@[a-z0-9._]{3,30}$/.test(w)) throw {message:'Usuario de WhatsApp inválido'}; }
+      const na=(t)=>String(t||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,' ').trim(); const a=na(p_address);
+      if(!d && !w && !a) throw {message:'Escribe la dirección, el usuario de WhatsApp o el celular del cliente'};
+      let r=(d && T.customers.find(x=>String(x.data.phone||'').replace(/\D/g,'').slice(-10)===d.slice(-10))) || (w && T.customers.find(x=>String(x.data.waUser||'')===w)) || (a && T.customers.find(x=>na(x.data.address)===a));
+      if(r){ Object.assign(r.data,{name:p_name}, p_address?{address:p_address}:{}, d?{phone:d}:{}, w?{waUser:w}:{}); notify('customers','UPDATE',r); }
+      else { r={id:'c'+Date.now(),data:{name:p_name,phone:d,waUser:w,address:p_address,notes:''},created_at:String(Date.now())}; T.customers.push(r); notify('customers','INSERT',r); }
       return r.id; },
+    confirm_qr_payment({p_order_id,p_ok,p_note}){ const r=T.orders.find(x=>x.id===p_order_id); if(r.data.paymentStatus!=='por_confirmar') throw {message:'Este pago no está pendiente de confirmación'};
+      Object.assign(r.data, p_ok ? {paymentStatus:'pagado'} : {paymentStatus:'rechazado', paymentRejectedNote:p_note}); notify('orders','UPDATE',r); return r.data; },
     set_kitchen_stage({p_order_id,p_stage}){ const r=T.orders.find(x=>x.id===p_order_id); const d=r.data, now=Date.now();
       if(p_stage==='preparacion'){ d.kitchenStage='preparacion'; d.prepAt=d.prepAt||now; }
       else if(p_stage==='horno'){ d.kitchenStage='horno'; d.prepAt=d.prepAt||now; d.ovenAt=now; }
@@ -132,7 +145,16 @@
       async rpc(fn,args){ calls.push({ rpc:fn, args:clone(args||{}) }); try{ return { data: rpcs[fn] ? rpcs[fn](args||{}) : null, error:null }; }catch(e){ return { data:null, error:e }; } },
       channel(){ const ch = { on(_t, f, cb){ listeners.push({ table:f.table, cb }); return ch; }, subscribe(cb){ setTimeout(()=>cb&&cb('SUBSCRIBED'),0); return ch; } }; return ch; },
       removeChannel(){},
-      functions: { async invoke(name, {body}){ calls.push({ fn:name, body:clone(body) }); return { data:{ ok:true }, error:null }; } },
+      functions: { async invoke(name, {body}){ calls.push({ fn:name, body:{ ...clone(body), image: body.image ? '[b64 '+body.image.length+']' : undefined } });
+        if(name==='read-invoice'){
+          if(window.__MOCK_NO_AI__) return { data:null, error:{ context:{ json: async()=>({ error:'Falta configurar la llave de IA (ANTHROPIC_API_KEY) en Supabase.', code:'no_key' }) } } };
+          return { data:{ ok:true, data:{ proveedor:'Distribuidora La Vaca', nit:'900123', numero:'FV-881', fecha:'2026-11-10', metodo_pago:'transferencia', subtotal:84000, iva:16000, total:100000, legible:true,
+            lineas:[ { descripcion:'Queso mozzarella 2 kg', cantidad:2, unidad:'kg', valor_total:80000, tipo:'insumo', insumo_id:'queso', cantidad_insumo:2000 },
+                     { descripcion:'Bolsas kraft x100', cantidad:1, unidad:'paq', valor_total:20000, tipo:'gasto', insumo_id:null, categoria_gasto:'Empaques' } ] } }, error:null };
+        }
+        return { data:{ ok:true }, error:null }; } },
+      storage: { from(bucket){ return { async upload(path){ calls.push({ storage:bucket, path }); return { data:{ path }, error:null }; },
+                                       async createSignedUrl(path){ return { data:{ signedUrl:'data:image/gif;base64,R0lGODlhAQABAAAAACw=' }, error:null }; } }; } },
     };
   };
 })();
