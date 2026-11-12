@@ -9,6 +9,12 @@
   window.ROLE_LABEL = ROLE_LABEL;
   const $ = (s)=>document.querySelector(s);
   const escH = (s)=>String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  // Usuarios sin correo: se guardan con un correo interno que nunca recibe mensajes
+  const USERNAME_DOMAIN = 'usuarios.tomates.invalid';
+  const loginToEmail = (v)=>{ v = String(v||'').trim().toLowerCase(); return v.includes('@') ? v : (v ? v + '@' + USERNAME_DOMAIN : ''); };
+  const isUsernameEmail = (e)=> String(e||'').toLowerCase().endsWith('@' + USERNAME_DOMAIN);
+  const usernameOf = (e)=> isUsernameEmail(e) ? String(e).split('@')[0] : '';
+  window.isUsernameEmail = isUsernameEmail; window.usernameOf = usernameOf;
 
   /* ---------------- Pantalla de acceso ---------------- */
   const gate = document.createElement('div');
@@ -22,11 +28,11 @@
     gate.hidden = false;
     body().innerHTML = `${logo()}
       <h2>Hoy se come pizza.</h2>
-      <p class="item-meta">Ingresa con el correo y la contraseña de tu invitación.</p>
+      <p class="item-meta">Ingresa con tu correo o tu nombre de usuario y tu contraseña.</p>
       ${msg ? `<div class="auth-msg">${escH(msg)}</div>` : ''}
       <form id="loginForm" autocomplete="on">
-        <label for="loginEmail">Correo</label>
-        <input id="loginEmail" type="email" autocomplete="username" required>
+        <label for="loginEmail">Correo o usuario</label>
+        <input id="loginEmail" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" required>
         <label for="loginPass">Contraseña</label>
         <input id="loginPass" type="password" autocomplete="current-password" required>
         <button class="primary" type="submit" id="loginBtn" style="width:100%;margin-top:14px">Entrar</button>
@@ -35,9 +41,9 @@
     $('#loginForm').addEventListener('submit', async (e)=>{
       e.preventDefault();
       const btn = $('#loginBtn'); btn.disabled = true; btn.textContent = 'Entrando…';
-      const { error } = await sb.auth.signInWithPassword({ email: $('#loginEmail').value.trim().toLowerCase(), password: $('#loginPass').value });
+      const { error } = await sb.auth.signInWithPassword({ email: loginToEmail($('#loginEmail').value), password: $('#loginPass').value });
       if(error){ btn.disabled = false; btn.textContent = 'Entrar';
-        showLogin(/invalid/i.test(error.message) ? 'Correo o contraseña incorrectos.' : TOM.friendly(error)); }
+        showLogin(/invalid/i.test(error.message) ? 'Usuario, correo o contraseña incorrectos.' : TOM.friendly(error)); }
     });
     $('#forgotBtn').addEventListener('click', showForgot);
   }
@@ -45,10 +51,10 @@
   function showForgot(){
     body().innerHTML = `${logo()}
       <h2>Recuperar contraseña</h2>
-      <p class="item-meta">Te enviaremos un enlace a tu correo para crear una contraseña nueva.</p>
+      <p class="item-meta">Te enviaremos un enlace a tu correo para crear una contraseña nueva. Si entras con nombre de usuario (sin correo), pídele al administrador una contraseña nueva.</p>
       <form id="forgotForm">
         <label for="forgotEmail">Correo</label>
-        <input id="forgotEmail" type="email" required>
+        <input id="forgotEmail" type="email" autocapitalize="none" required>
         <button class="primary" type="submit" style="width:100%;margin-top:14px">Enviar enlace</button>
       </form>
       <button class="ghost" type="button" id="backBtn" style="width:100%;margin-top:8px">Volver</button>`;
@@ -56,16 +62,17 @@
     $('#forgotForm').addEventListener('submit', async (e)=>{
       e.preventDefault();
       const email = $('#forgotEmail').value.trim().toLowerCase();
+      if(isUsernameEmail(email) || !email.includes('@')){ showLogin('Si entras con nombre de usuario, pídele al administrador una contraseña nueva.'); return; }
       await sb.auth.resetPasswordForEmail(email, { redirectTo: location.origin + location.pathname });
       showLogin('Si el correo tiene una cuenta, te llegará un enlace en unos minutos. Revisa también la carpeta de spam.');
     });
   }
 
-  function showSetPassword(isInvite){
+  function showSetPassword(isInvite, isTemp){
     gate.hidden = false;
     body().innerHTML = `${logo()}
-      <h2>${isInvite ? 'Bienvenido a Tomates' : 'Nueva contraseña'}</h2>
-      <p class="item-meta">${isInvite ? 'Crea tu contraseña para entrar a la app.' : 'Escribe tu contraseña nueva.'}</p>
+      <h2>${isInvite ? 'Bienvenido a Tomates' : (isTemp ? 'Cambia tu contraseña' : 'Nueva contraseña')}</h2>
+      <p class="item-meta">${isInvite ? 'Crea tu contraseña para entrar a la app.' : (isTemp ? 'Entraste con una contraseña temporal. Escribe una nueva que solo tú conozcas.' : 'Escribe tu contraseña nueva.')}</p>
       <form id="passForm">
         <label for="newPass">Contraseña (mínimo 8 caracteres)</label>
         <input id="newPass" type="password" autocomplete="new-password" minlength="8" required>
@@ -79,9 +86,10 @@
       const p1 = $('#newPass').value, p2 = $('#newPass2').value, err = $('#passErr');
       if(p1 !== p2){ err.hidden = false; err.textContent = 'Las contraseñas no coinciden.'; return; }
       $('#passBtn').disabled = true;
-      const { error } = await sb.auth.updateUser({ password: p1 });
+      const { error } = await sb.auth.updateUser({ password: p1, data: { must_change_password: false } });
       if(error){ $('#passBtn').disabled = false; err.hidden = false; err.textContent = TOM.friendly(error); return; }
       TOM.linkType = '';
+      if(TOM.user && TOM.user.user_metadata) TOM.user.user_metadata.must_change_password = false;
       history.replaceState(null, '', location.pathname);
       enter();
     });
@@ -108,6 +116,7 @@
     if(!session){ showLogin(TOM.linkError ? 'El enlace ya no es válido o venció. Pide uno nuevo.' : ''); return; }
     TOM.user = session.user;
     if(TOM.linkType==='invite' || TOM.linkType==='recovery'){ showSetPassword(TOM.linkType==='invite'); return; }
+    if(session.user.user_metadata && session.user.user_metadata.must_change_password){ showSetPassword(false, true); return; }
     try{ await TOM.loadProfile(); }
     catch(e){ showLogin('No se pudo cargar tu perfil. ' + TOM.friendly(e)); return; }
     const role = TOM.profile && TOM.profile.role;
@@ -124,7 +133,7 @@
     if(!h || document.getElementById('userChip')) return;
     const chip = document.createElement('div');
     chip.id = 'userChip';
-    chip.innerHTML = `<div class="uc-name">${escH(TOM.profile.name || TOM.user.email)}</div>
+    chip.innerHTML = `<div class="uc-name">${escH(TOM.profile.name || usernameOf(TOM.user.email) || TOM.user.email)}</div>
       <div class="uc-role">${escH(ROLE_LABEL[TOM.profile.role]||TOM.profile.role)}</div>
       <button class="ghost uc-out" type="button" onclick="tomatesLogout()">Salir</button>`;
     h.appendChild(chip);
@@ -269,18 +278,23 @@
     const withProfile = new Set(users.map(u=>String(u.email||'').toLowerCase()));
     const pending = invitesCache.filter(i=>!i.accepted_at && !withProfile.has(i.email));
     wrap.innerHTML = `
-      <button class="primary" style="width:100%;margin-bottom:12px" onclick="openInviteModal()">＋ Invitar persona</button>
+      <div class="row" style="gap:8px;margin-bottom:12px">
+        <button class="primary" style="flex:1" onclick="openInviteModal()">＋ Invitar por correo</button>
+        <button class="secondary" style="flex:1" onclick="openUsernameModal()">＋ Crear usuario sin correo</button>
+      </div>
       ${users.map(u=>`
         <div class="card">
           <div class="row">
             <div style="min-width:0">
               <div class="item-name">${escH(u.name||u.email)}${u.id===myUid?' (tú)':''}</div>
-              <div class="item-meta">${escH(u.email||'')}</div>
+              <div class="item-meta">${isUsernameEmail(u.email) ? '👤 Usuario: <b>'+escH(usernameOf(u.email))+'</b>' : escH(u.email||'')}</div>
             </div>
             <span class="pill ${u.role==='admin'?'accent':(u.role==='inactivo'||u.role==='pendiente'?'bad':'good')}">${escH(ROLE_LABEL[u.role]||u.role)}</span>
           </div>
-          ${!u.lastSeenAt && u.id!==myUid ? `<div class="row" style="margin-top:6px;gap:8px"><span class="item-meta">Invitación enviada, aún no ha entrado.</span>
+          ${!u.lastSeenAt && u.id!==myUid && !isUsernameEmail(u.email) ? `<div class="row" style="margin-top:6px;gap:8px"><span class="item-meta">Invitación enviada, aún no ha entrado.</span>
             <button class="ghost" style="width:auto" onclick="resendInvite('${escH(u.email)}')">Reenviar correo</button></div>` : ''}
+          ${!u.lastSeenAt && u.id!==myUid && isUsernameEmail(u.email) ? `<div class="item-meta" style="margin-top:6px">Aún no ha entrado. La primera vez deberá cambiar la contraseña temporal.</div>` : ''}
+          ${u.id!==myUid && (isAdmin || u.role!=='admin') ? `<div style="margin-top:6px"><button class="ghost" style="width:auto" onclick="openSetPasswordModal('${u.id}')">🔑 Poner contraseña temporal</button></div>` : ''}
           ${u.id!==myUid && (isAdmin || u.role!=='admin') ? `
           <div class="row" style="margin-top:8px;gap:8px">
             <select id="role_${u.id}" style="flex:1">${roleOpts(u.role)}</select>
@@ -312,6 +326,57 @@
     catch(e){ toast(e.message); renderUsuarios(); }
   };
   window.setUserRole = (id, role)=>TOM.rpc('set_user_role', { p_user:id, p_role:role });
+
+  window.openUsernameModal = function(){
+    const isAdmin = TOM.profile.role==='admin';
+    modalBody.innerHTML = `
+      <h3>Crear usuario sin correo</h3>
+      <div class="item-meta">La persona entra con el nombre de usuario y la contraseña temporal que le des. La primera vez la app le pedirá cambiarla.</div>
+      <label for="unName">Nombre</label><input id="unName" placeholder="Nombre y apellido">
+      <label for="unUser">Nombre de usuario</label><input id="unUser" autocapitalize="none" spellcheck="false" placeholder="ej: cocina1" maxlength="30">
+      <div class="item-meta">Letras minúsculas, números, punto, guion o guion bajo (3 a 30).</div>
+      <label for="unPass">Contraseña temporal (mínimo 8)</label><input id="unPass" type="text" autocomplete="off" minlength="8">
+      <label for="unRole">Rol</label>
+      <select id="unRole">${[...(isAdmin?['admin']:[]), ...ASSIGNABLE].map(r=>`<option value="${r}" ${r==='cajero'?'selected':''}>${ROLE_LABEL[r]}</option>`).join('')}</select>
+      <div id="unErr" class="item-meta" style="color:var(--bad);font-weight:700"></div>
+      <div class="modal-actions">
+        <button class="secondary" onclick="closeModal()">Cancelar</button>
+        <button class="primary" id="unBtn" onclick="createUsername()">Crear usuario</button>
+      </div>`;
+    modalBg.classList.add('open');
+  };
+  window.createUsername = async function(){
+    const err = (m)=>{ document.getElementById('unErr').textContent = m; };
+    const username = document.getElementById('unUser').value.trim().toLowerCase();
+    const password = document.getElementById('unPass').value;
+    const name = document.getElementById('unName').value.trim();
+    const role = document.getElementById('unRole').value;
+    if(!/^[a-z0-9][a-z0-9._-]{2,29}$/.test(username)) return err('Usuario no válido: 3 a 30 caracteres, minúsculas, números, punto, guion o guion bajo.');
+    if(password.length < 8) return err('La contraseña temporal debe tener mínimo 8 caracteres.');
+    const btn = document.getElementById('unBtn'); btn.disabled = true; btn.textContent = 'Creando…';
+    try{ await callInvite({ action:'create_username', username, password, name, role }); closeModal(); toast('Usuario '+username+' creado. Entrega la contraseña temporal en persona.', 'ok'); }
+    catch(e){ btn.disabled = false; btn.textContent = 'Crear usuario'; err(e.message); }
+  };
+  window.openSetPasswordModal = function(userId){
+    const u = state.roles.find(r=>r.id===userId); if(!u) return;
+    modalBody.innerHTML = `
+      <h3>Contraseña temporal</h3>
+      <div class="item-meta">${escH(u.name||'')} ${isUsernameEmail(u.email) ? '(usuario '+escH(usernameOf(u.email))+')' : '('+escH(u.email)+')'} entrará con esta contraseña y la app le pedirá cambiarla.</div>
+      <label for="spPass">Contraseña temporal (mínimo 8)</label><input id="spPass" type="text" autocomplete="off" minlength="8">
+      <div id="spErr" class="item-meta" style="color:var(--bad);font-weight:700"></div>
+      <div class="modal-actions">
+        <button class="secondary" onclick="closeModal()">Cancelar</button>
+        <button class="primary" id="spBtn" onclick="setTempPassword('${userId}')">Guardar</button>
+      </div>`;
+    modalBg.classList.add('open');
+  };
+  window.setTempPassword = async function(userId){
+    const password = document.getElementById('spPass').value;
+    if(password.length < 8){ document.getElementById('spErr').textContent = 'Mínimo 8 caracteres.'; return; }
+    const btn = document.getElementById('spBtn'); btn.disabled = true;
+    try{ await callInvite({ action:'set_password', userId, password }); closeModal(); toast('Contraseña temporal guardada', 'ok'); }
+    catch(e){ btn.disabled = false; document.getElementById('spErr').textContent = e.message; }
+  };
 
   window.openInviteModal = function(){
     const isAdmin = TOM.profile.role==='admin';
