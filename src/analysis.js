@@ -169,6 +169,12 @@
       const t = byType[typeOf(o)]; t.n += 1; t.sales += (o.total||0) - (o.deliveryFee||0);
       if(o.orderType==='local' && o.spot){ const sp = spots[o.spot] = spots[o.spot] || { n:0, sales:0 }; sp.n += 1; sp.sales += (o.total||0); }
     });
+    // Descuentos y promociones
+    const promoAgg = {}; let discTotal = 0, discOrders = 0;
+    (state.orders||[]).filter(o=>o.status==='entregado' && o.date && o.date>=from && o.date<=to && o.discountAmount>0).forEach(o=>{
+      const k = (o.discount && o.discount.name) || 'Descuento'; const a = promoAgg[k] = promoAgg[k] || { n:0, amount:0, sales:0 };
+      a.n += 1; a.amount += o.discountAmount; a.sales += (o.total||0) - (o.deliveryFee||0); discTotal += o.discountAmount; discOrders += 1;
+    });
     const typeRows = TYPES.filter(([k])=> k!=='otro' || byType.otro.n>0).map(([k,l])=>({ k, l, ...byType[k] }));
     // Tiempos de cocina (promedios por periodo)
     const KT = {}; keys.forEach(k=> KT[k] = { wait:[], prep:[], oven:[], total:[], deliv:[] });
@@ -201,6 +207,7 @@
         ${kpi(pctTxt(T.sales>0 ? T.purchases/T.sales*100 : null),'Compras / ventas')}
         ${kpi(fmt(T.cogs),'Costo teórico de lo vendido')}
         ${kpi(pctTxt(T.sales>0 ? (T.sales-T.cogs)/T.sales*100 : null),'Margen bruto teórico')}
+        ${kpi(fmt(discTotal),'Descuentos otorgados ('+discOrders+')')}
       </div>
       <div class="item-meta" style="margin-bottom:6px">${T.orders} pedido${T.orders===1?'':'s'} entregado${T.orders===1?'':'s'} entre ${escH(labelOf(keyOf(from)))} y ${escH(labelOf(keyOf(to)))}.</div>
       ${barChart(rows)}
@@ -221,6 +228,12 @@
         <tbody>${typeRows.map(r=>`<tr><td>${escH(r.l)}</td><td style="text-align:right">${r.n}</td><td style="text-align:right">${escH(fmt(r.sales))}</td>
           <td style="text-align:right">${pctTxt(T.sales>0 ? r.sales/T.sales*100 : null)}</td><td style="text-align:right">${r.n ? escH(fmt(r.sales/r.n)) : '—'}</td></tr>`).join('')}</tbody></table></div>
       ${Object.keys(spots).length ? `<div class="item-meta" style="margin-top:6px">Por ubicación: ${Object.keys(spots).sort().map(k=>`${escH(k)} ${spots[k].n} (${escH(fmt(spots[k].sales))})`).join(' · ')}</div>` : ''}
+
+      ${Object.keys(promoAgg).length ? `<h3 class="section-title" style="font-size:20px;margin-top:18px">Descuentos y promociones</h3>
+      <div class="perm-wrap"><table class="perm-table" style="min-width:420px">
+        <thead><tr><th style="text-align:left">Promoción</th><th>Pedidos</th><th>Descuento dado</th><th>Ventas con la promo</th></tr></thead>
+        <tbody>${Object.entries(promoAgg).sort((a,b)=>b[1].amount-a[1].amount).map(([k,v])=>`<tr><td>${escH(k)}</td><td style="text-align:right">${v.n}</td><td style="text-align:right">${escH(fmt(v.amount))}</td><td style="text-align:right">${escH(fmt(v.sales))}</td></tr>`).join('')}</tbody></table></div>
+      <div class="item-meta" style="margin-top:4px">Las ventas ya están netas de descuento.</div>` : ''}
 
       <h3 class="section-title" style="font-size:20px;margin-top:18px">Tiempos de cocina</h3>
       <div class="perm-wrap"><table class="perm-table" style="min-width:620px">
