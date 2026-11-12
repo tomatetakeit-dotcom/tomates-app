@@ -1,8 +1,8 @@
 {
   "id": "/",
-  "name": "Tomates Pizzería",
+  "name": "Tomates Pizza",
   "short_name": "Tomates",
-  "description": "Ventas, cocina, caja e inventario de Tomates Pizzería.",
+  "description": "Ventas, cocina, caja e inventario de Tomates Pizza.",
   "lang": "es-CO",
   "start_url": "/",
   "scope": "/",
