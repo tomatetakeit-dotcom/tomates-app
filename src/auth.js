@@ -22,7 +22,7 @@
   gate.innerHTML = `<div class="auth-card"><div id="authBody"><div class="item-meta">Cargando…</div></div></div>`;
   document.body.appendChild(gate);
   const body = ()=>$('#authBody');
-  const logo = ()=> `<img src="brand/logo/tomates-logo-440.webp" width="200" height="200" alt="Tomates Pizzería" class="auth-logo">`;
+  const logo = ()=> `<img src="brand/logo/tomates-logo-440.webp" width="200" height="200" alt="Tomates Pizza" class="auth-logo">`;
 
   function showLogin(msg){
     gate.hidden = false;
@@ -134,9 +134,14 @@
     const chip = document.createElement('div');
     chip.id = 'userChip';
     chip.innerHTML = `<div class="uc-name">${escH(TOM.profile.name || usernameOf(TOM.user.email) || TOM.user.email)}</div>
-      <div class="uc-role">${escH(ROLE_LABEL[TOM.profile.role]||TOM.profile.role)}</div>
+      <div class="uc-role"><span id="liveDot" class="uc-live" title="Datos en vivo">●</span> ${escH(ROLE_LABEL[TOM.profile.role]||TOM.profile.role)}</div>
       <button class="ghost uc-out" type="button" onclick="tomatesLogout()">Salir</button>`;
     h.appendChild(chip);
+    const paint = (on)=>{ const d = document.getElementById('liveDot'); if(!d) return;
+      d.classList.toggle('off', on===false); d.title = on===false ? 'Reconectando… toca para actualizar' : 'Datos en vivo'; };
+    paint(TOM.live);
+    window.addEventListener('tomates:live', (e)=>paint(e.detail));
+    document.getElementById('liveDot').addEventListener('click', ()=>{ TOM.resync && TOM.resync(true); toast('Actualizando datos…', 'ok'); });
   }
 
   sb.auth.onAuthStateChange((event)=>{
