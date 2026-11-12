@@ -389,7 +389,7 @@ s = rep(s, "      ${st==='pendiente' ? `<div class=\"row\" style=\"margin-top:8p
            "      ${o.webStatus==='por_confirmar' ? webOrderButtonsHtml(o) : st==='pendiente' ? `<div class=\"row\" style=\"margin-top:8px;gap:8px\">\n          <button class=\"primary\" style=\"flex:1;padding:11px\" onclick=\"setOrderStatus('${o.id}','listo')\">")
 s = rep(s, "${st!=='entregado' ? (myPendingRequest", "${st!=='entregado' && o.webStatus!=='por_confirmar' ? (myPendingRequest")
 s = rep(s, "        ${o.customerPhone? `<button class=\"ghost\" onclick=\"sendOrderWhatsApp('${o.id}')\">📲 WhatsApp</button>`:''}",
-           "        ${(o.customerPhone||o.customerWaUser)? `<button class=\"ghost\" onclick=\"sendOrderWhatsApp('${o.id}')\">📲 Avisar</button>`:''}")
+           "        ${(o.customerPhone||o.customerWaUser)? `<button class=\"ghost\" onclick=\"sendOrderWhatsApp('${o.id}')\">📲 Avisar</button>`:''}\n        ${webCancelBtnHtml(o)}")
 s = rep(s, "    const pill = st==='entregado' ? '<span class=\"pill good\">Entregado</span>'",
            "    const pill = o.webStatus==='por_confirmar' ? '<span class=\"pill warn\">🌐 Web · por confirmar</span>' : st==='entregado' ? '<span class=\"pill good\">Entregado</span>'")
 s = rep(s, "      ${timeline}\n      <div class=\"row\" style=\"margin-top:8px\">\n        <div class=\"item-name\" style=\"font-size:15px\">${fmt(o.total)}</div>",
