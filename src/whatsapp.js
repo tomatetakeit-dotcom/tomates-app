@@ -165,21 +165,39 @@
     const has = o.customerPhone || o.customerWaUser;
     toast('Pedido confirmado y enviado a cocina' + (has ? '. Avísale al cliente con 📲' : ''), 'ok');
   };
+  /* ---------- Rechazar / cancelar pedidos web ----------
+     Un pedido de la página se puede cancelar hasta antes de entregarlo; se borra por completo.
+     Si ya tiene un pago registrado, solo el administrador (pagos.confirmar) puede cancelarlo. */
+  const isPaid = (o)=> (o.paymentStatus==='pagado' || o.paymentStatus==='por_confirmar') && o.paymentMethod!=='cortesia';
+  window.webCancelBtnHtml = function(o){
+    if(o.source!=='web' || o.webStatus==='por_confirmar' || o.status==='entregado' || !TOM.can('ventas.crear')) return '';
+    return `<button class="ghost" style="color:var(--bad)" onclick="openRejectWeb('${o.id}')">🚫 Cancelar</button>`;
+  };
   window.openRejectWeb = function(id){
     const o = state.orders.find(x=>x.id===id); if(!o) return;
-    modalBody.innerHTML = `<h3>Rechazar pedido web #${escH(id.slice(0,5))}</h3>
-      <div class="item-meta">El pedido se borra. Si el cliente dejó su WhatsApp, avísale el motivo.</div>
+    const pending = o.webStatus==='por_confirmar';
+    const verb = pending ? 'Rechazar' : 'Cancelar';
+    const paid = isPaid(o), allowed = !paid || TOM.can('pagos.confirmar');
+    const cooking = !pending && (o.status==='listo' || o.kitchenStage==='preparacion' || o.kitchenStage==='horno');
+    modalBody.innerHTML = `<h3>${verb} pedido web #${escH(id.slice(0,5))}</h3>
+      <div class="item-meta">${escH(o.customerName||'')} · ${escH(orderPlaceLabel(o))} · ${fmt(o.total)}</div>
+      <div class="item-meta" style="margin-top:6px;color:var(--fg)">${(o.items||[]).map(it=>`${it.qty}× ${escH(it.name)}`).join(', ')}</div>
+      <div class="item-meta" style="margin-top:8px">El pedido se borra por completo de Ventas y de Cocina, y no queda registro. Si el cliente dejó su WhatsApp, avísale.</div>
+      ${cooking ? `<div class="item-meta" style="margin-top:6px;color:var(--bad);font-weight:700">⚠️ Cocina ya ${o.status==='listo'?'lo tiene listo':'lo está preparando'}. Avísales.</div>` : ''}
+      ${paid ? `<div class="item-meta" style="margin-top:6px;color:var(--bad);font-weight:700">⚠️ Tiene un pago registrado (${escH(o.paymentMethodLabel||o.paymentMethod||'')} ${fmt(o.paymentAmount||o.total)}). Al cancelarlo ese ingreso sale de la caja: devuelve el dinero al cliente.${allowed?'':' Solo el administrador puede cancelarlo.'}</div>` : ''}
       <div class="modal-actions">
         <button class="secondary" onclick="closeModal()">Volver</button>
-        ${(o.customerPhone||o.customerWaUser) ? `<button class="secondary" onclick="sendOrderWhatsApp('${o.id}','rechazado')">📲 Avisar</button>` : ''}
-        <button class="primary" style="background:var(--bad)" onclick="doRejectWeb('${o.id}')">Rechazar y borrar</button>
+        ${(o.customerPhone||o.customerWaUser) ? `<button class="secondary" onclick="sendOrderWhatsApp('${o.id}','${pending?'rechazado':'cancelado'}')">📲 Avisar</button>` : ''}
+        ${allowed ? `<button class="primary" style="background:var(--bad)" id="rjBtn" onclick="doRejectWeb('${o.id}')">${verb} y borrar</button>` : ''}
       </div>`;
     modalBg.classList.add('open');
   };
   window.doRejectWeb = async function(id){
-    try{ await TOM.rpc('confirm_web_order', { p_order_id:id, p_accept:false }); }
-    catch(e){ toast(e.message || String(e)); return; }
-    closeModal(); toast('Pedido web rechazado', 'ok');
+    const o = state.orders.find(x=>x.id===id); const pending = o && o.webStatus==='por_confirmar';
+    const btn = document.getElementById('rjBtn'); if(btn){ btn.disabled = true; btn.textContent = 'Borrando…'; }
+    try{ await TOM.rpc('cancel_web_order', { p_order_id:id }); }
+    catch(e){ if(btn){ btn.disabled = false; btn.textContent = (pending?'Rechazar':'Cancelar')+' y borrar'; } toast(e.message || String(e)); return; }
+    closeModal(); toast(pending ? 'Pedido web rechazado' : 'Pedido web cancelado', 'ok');
   };
 
   /* ---------- Aviso al cliente por WhatsApp según el estado ---------- */
@@ -188,6 +206,7 @@
     const items = (o.items||[]).map(it=>`- ${it.qty}x ${it.name}`).join('\n');
     const money = `${items}${o.discountAmount>0?'\nDescuento: −'+fmt(o.discountAmount):''}${o.deliveryFee?'\nDomicilio: '+fmt(Math.max(0,(o.deliveryFee||0)-(o.deliveryDiscount||0))):''}\nTotal: ${fmt(o.total)}`;
     const id = '#'+(o.id||'').slice(0,5);
+    if(forced==='cancelado') return `${hi}. Tu pedido ${id} fue cancelado. Si tienes alguna duda, escríbenos por aquí.`;
     if(forced==='rechazado') return `${hi}. Lo sentimos, no podemos atender tu pedido ${id} en este momento.`;
     if(o.webStatus==='por_confirmar') return `${hi}. Recibimos tu pedido ${id}:\n${items}\nProductos: ${fmt(o.subtotal||o.total)}${o.orderType==='domicilio'?'\nEn un momento te confirmamos el valor del domicilio.':''}`;
     if(o.status==='entregado') return `${hi}. Tu pedido ${id} fue entregado. ¡Gracias por preferirnos! 🙌`;
