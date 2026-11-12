@@ -132,6 +132,8 @@
       if(!p_accept){ T.orders=T.orders.filter(x=>x!==r); notify('orders','DELETE',null,r); return {deleted:true}; }
       let fee=Number(p_delivery_fee)||0; if(r.data.orderType==='domicilio'){ if(fee<=0) throw {message:'Elige la tarifa del domicilio'}; } else fee=0;
       Object.assign(r.data,{webStatus:'confirmado',confirmedAt:Date.now(),deliveryFee:fee,deliveryService:p_delivery_service||'',total:(r.data.subtotal||0)+fee}); notify('orders','UPDATE',r); return r.data; },
+    cancel_web_order({p_order_id}){ const r=T.orders.find(x=>x.id===p_order_id); if(!r) throw {message:'El pedido ya no existe'}; if(r.data.source!=='web') throw {message:'Solo pedidos web'}; if(r.data.status==='entregado') throw {message:'El pedido ya fue entregado; no se puede cancelar'};
+      T.orders=T.orders.filter(x=>x!==r); notify('orders','DELETE',null,r); return {deleted:true}; },
     set_user_role({p_user,p_role}){ const p=T.profiles.find(x=>x.id===p_user); p.role=p_role; notify('profiles','UPDATE',p); return null; },
   };
 
