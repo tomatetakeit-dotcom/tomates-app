@@ -48,6 +48,7 @@
   const authCbs = [];
   const me = ()=> session && T.profiles.find(p=>p.id===session.user.id);
   const notify = (table, eventType, row, old)=> listeners.filter(l=>l.table===table).forEach(l=>setTimeout(()=>l.cb({ eventType, new:row, old:old||row }),0));
+  window.__MOCK_NOTIFY__ = notify;
   const clone = (x)=>JSON.parse(JSON.stringify(x));
 
   function query(table){
@@ -127,6 +128,10 @@
     set_ingredient_cost({p_ingredient_id,p_cost,p_date,p_note}){ const i=T.ingredients.find(x=>x.id===p_ingredient_id); const prev=i.data.currentCost; i.data.currentCost=p_cost;
       const h={id:'h'+Date.now(),ingredient_id:i.id,cost:p_cost,previous_cost:prev,source:'manual',effective_date:p_date,note:p_note,changed_by:session.user.id,created_at:new Date().toISOString()};
       T.ingredient_cost_history.push(h); notify('ingredients','UPDATE',i); notify('ingredient_cost_history','INSERT',h); return null; },
+    confirm_web_order({p_order_id,p_accept,p_delivery_fee,p_delivery_service}){ const r=T.orders.find(x=>x.id===p_order_id); if(!r||r.data.webStatus!=='por_confirmar') throw {message:'Este pedido ya fue revisado'};
+      if(!p_accept){ T.orders=T.orders.filter(x=>x!==r); notify('orders','DELETE',null,r); return {deleted:true}; }
+      let fee=Number(p_delivery_fee)||0; if(r.data.orderType==='domicilio'){ if(fee<=0) throw {message:'Elige la tarifa del domicilio'}; } else fee=0;
+      Object.assign(r.data,{webStatus:'confirmado',confirmedAt:Date.now(),deliveryFee:fee,deliveryService:p_delivery_service||'',total:(r.data.subtotal||0)+fee}); notify('orders','UPDATE',r); return r.data; },
     set_user_role({p_user,p_role}){ const p=T.profiles.find(x=>x.id===p_user); p.role=p_role; notify('profiles','UPDATE',p); return null; },
   };
 
