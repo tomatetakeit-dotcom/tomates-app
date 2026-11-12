@@ -703,9 +703,14 @@ body.kds-wide main { max-width: 1500px; }
       const { data } = await sb.auth.getSession();          // renueva la sesión si venció
       const token = data && data.session && data.session.access_token;
       if(token && sb.realtime && sb.realtime.setAuth) sb.realtime.setAuth(token);
-      if(sb.realtime && sb.realtime.isConnected && !sb.realtime.isConnected()) sb.realtime.connect();
+      if(sb.realtime && sb.realtime.isConnected && !sb.realtime.isConnected()){ sb.realtime.connect(); await new Promise(r=>setTimeout(r, 2500)); }
       Object.values(WATCHERS).flat().filter(w=>w.alive && (!w.ch || w.ch.state!=='joined')).forEach(w=>w.resub());
+      // Otros canales (permisos, promociones, facturas…): volver a unirse si quedaron cerrados
+      const mine = new Set(Object.values(WATCHERS).flat().map(w=>w.ch));
+      (sb.getChannels ? sb.getChannels() : []).filter(c=>!mine.has(c) && !/^realtime:t_/.test(c.topic) && (c.state==='closed' || c.state==='errored'))
+        .forEach(c=>{ try{ c.subscribe(); }catch(e){} });
       await Promise.all(Object.values(WATCHERS).flat().filter(w=>w.alive).map(w=>w.load()));
+      try{ window.dispatchEvent(new Event('tomates:resynced')); }catch(e){}
     }catch(e){ console.warn('resync', e); }
     finally{ resyncing = false; setLive(); }
   }
@@ -4322,6 +4327,7 @@ initDb();
   TOM.whenReady.then(()=>{
     loadPromos();
     sb.channel('promo_watch').on('postgres_changes', { event:'*', schema:'public', table:'promotions' }, loadPromos).subscribe();
+    window.addEventListener('tomates:resynced', loadPromos);
   });
   function renderPromoBits(){
     const b = document.getElementById('promoBtn'); if(b) b.style.display = TOM.can('promos.gestionar') ? '' : 'none';
