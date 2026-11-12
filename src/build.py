@@ -127,40 +127,53 @@ s = rep(s, "let orderDeliveryService = '';", """let orderDeliveryService = '';
 const ORDER_SPOTS = ['Mesa 1','Mesa 2','Mesa 3','Barra 1','Barra 2','Barra 3','Barra 4'];
 let orderType = '';   // 'domicilio' | 'local'
 let orderSpot = '';   // Mesa 1 … Barra 4
-let orderCust = { phone:'', name:'', address:'', id:null, auto:false };
+let orderCust = { phone:'', waUser:'', name:'', address:'', id:null, auto:false };
 function phoneLast10(v){ return String(v||'').replace(/\\D/g,'').slice(-10); }
 function normPhoneCO(v){ let d = String(v||'').replace(/\\D/g,''); if(d.length===10) d = '57'+d; return (d.length===12 && d.startsWith('57')) ? d : ''; }
 function findCustomerByPhone(v){ const k = phoneLast10(v); if(k.length<10) return null; return state.customers.find(c=>phoneLast10(c.phone)===k) || null; }
+// Usuario de WhatsApp: empieza con @; letras, números, punto o guion bajo. '' = vacío, null = inválido
+function normWaUser(v){ let w = String(v||'').replace(/\\s/g,'').toLowerCase(); if(!w) return ''; if(w[0]!=='@') w = '@'+w; return /^@[a-z0-9._]{3,30}$/.test(w) ? w : null; }
+function normAddr(v){ return String(v||'').toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').replace(/[^a-z0-9]+/g,' ').trim(); }
+// Busca el cliente por celular, luego por @usuario y luego por dirección
+function findCustomerMatch(){
+  const byPhone = findCustomerByPhone(orderCust.phone); if(byPhone) return byPhone;
+  const w = normWaUser(orderCust.waUser);
+  if(w){ const c = state.customers.find(x=>String(x.waUser||'').toLowerCase()===w); if(c) return c; }
+  const a = normAddr(orderCust.address);
+  if(a.length>=6){ const c = state.customers.find(x=>normAddr(x.address)===a); if(c) return c; }
+  return null;
+}
 function orderCustInfoText(){
-  const k = phoneLast10(orderCust.phone);
-  if(k.length<10) return 'Escribe los 10 dígitos del celular.';
-  const c = findCustomerByPhone(k);
-  if(c){ const n = customerStats(c.id).count; return '✔ Cliente registrado' + (n ? ' · '+n+' pedido'+(n===1?'':'s') : '') + '. Si cambias el nombre o la dirección, se actualizan.'; }
-  return 'Cliente nuevo: quedará guardado con este celular.';
+  const c = findCustomerMatch();
+  if(c){ const n = customerStats(c.id).count; return '✔ Cliente registrado' + (n ? ' · '+n+' pedido'+(n===1?'':'s') : '') + (c.waUser ? ' · '+c.waUser : '') + '. Si cambias los datos, se actualizan.'; }
+  if(orderCust.waUser && normWaUser(orderCust.waUser)===null) return 'El usuario de WhatsApp empieza con @ y usa letras, números, punto o guion bajo.';
+  const has = phoneLast10(orderCust.phone).length===10 || normWaUser(orderCust.waUser) || normAddr(orderCust.address).length>=6;
+  return has ? 'Cliente nuevo: quedará guardado con estos datos.' : 'Identifícalo con su usuario de WhatsApp (@…) o su dirección. El celular es opcional.';
 }
 function selectOrderType(t, spot){
   orderType = t; orderSpot = t==='local' ? (spot||'') : '';
   if(t!=='domicilio'){ orderDeliveryFee = 0; orderDeliveryManual = false; orderDeliveryService = ''; }
   renderOrderMainScreen();
-  if(t==='domicilio') setTimeout(()=>{ const el = document.getElementById('ordCustPhone'); if(el && !el.value) el.focus(); }, 0);
+  if(t==='domicilio') setTimeout(()=>{ const el = document.getElementById('ordCustWa'); if(el && !el.value) el.focus(); }, 0);
 }
 function onOrderCustInput(field){
-  const ids = { phone:'ordCustPhone', name:'ordCustName', address:'ordCustAddress' };
+  const ids = { phone:'ordCustPhone', waUser:'ordCustWa', name:'ordCustName', address:'ordCustAddress' };
   const el = document.getElementById(ids[field]);
   orderCust[field] = el ? el.value : '';
-  if(field!=='phone') orderCust.auto = false;
-  if(field==='phone'){
-    const c = findCustomerByPhone(orderCust.phone);
+  if(field==='name') orderCust.auto = false;
+  if(field!=='name'){
+    const c = findCustomerMatch();
     if(c){
-      if(orderCust.id!==c.id && (orderCust.auto || (!orderCust.name && !orderCust.address))){
-        orderCust.name = c.name||''; orderCust.address = c.address||''; orderCust.auto = true;
-        const n = document.getElementById('ordCustName'); if(n) n.value = orderCust.name;
-        const a = document.getElementById('ordCustAddress'); if(a) a.value = orderCust.address;
+      if(orderCust.id!==c.id && (orderCust.auto || !orderCust.name)){
+        const set = (k, id, v)=>{ if(k===field) return; if(orderCust[k] && !orderCust.auto) return; orderCust[k] = v||''; const x = document.getElementById(id); if(x) x.value = orderCust[k]; };
+        set('name','ordCustName', c.name); set('address','ordCustAddress', c.address);
+        set('waUser','ordCustWa', c.waUser); set('phone','ordCustPhone', c.phone ? phoneLast10(c.phone) : '');
+        orderCust.auto = true;
       }
       orderCust.id = c.id;
     } else { orderCust.id = null; }
-    const info = document.getElementById('ordCustInfo'); if(info) info.textContent = orderCustInfoText();
   }
+  const info = document.getElementById('ordCustInfo'); if(info) info.textContent = orderCustInfoText();
   setOrderErr('');
 }
 function setOrderErr(msg, focusId){
@@ -171,12 +184,12 @@ function setOrderErr(msg, focusId){
 s = rep(s, """    orderDeliveryService = (o && o.deliveryService) || '';
   } else {""", """    orderDeliveryService = (o && o.deliveryService) || '';
     orderType = (o && o.orderType) || ''; orderSpot = (o && o.spot) || '';
-    orderCust = { phone: o && o.orderType==='domicilio' ? phoneLast10(o.customerPhone) : '', name: (o && o.orderType==='domicilio' && o.customerName) || '',
+    orderCust = { phone: o && o.orderType==='domicilio' ? phoneLast10(o.customerPhone) : '', waUser: (o && o.customerWaUser) || '', name: (o && o.orderType==='domicilio' && o.customerName) || '',
                   address: (o && o.customerAddress) || '', id: (o && o.customerId) || null, auto:false };
   } else {""")
 s = rep(s, """    orderDeliveryManual = false; orderDeliveryService = '';
   }""", """    orderDeliveryManual = false; orderDeliveryService = '';
-    orderType = ''; orderSpot = ''; orderCust = { phone:'', name:'', address:'', id:null, auto:false };
+    orderType = ''; orderSpot = ''; orderCust = { phone:'', waUser:'', name:'', address:'', id:null, auto:false };
   }""")
 
 # Selector arriba del formulario
@@ -198,7 +211,9 @@ s = rep(s, """    <label>Domicilio (opcional, se paga en su totalidad al domicil
         <div class="prod-tile-name">Sin<br>domicilio</div>
       </div>""", """    ${orderType==='domicilio' ? `
     <div class="ot-cust">
-      <label style="margin-top:0">Celular del cliente *</label>
+      <label style="margin-top:0">Usuario de WhatsApp</label>
+      <input id="ordCustWa" type="text" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="@usuario" value="${esc(orderCust.waUser)}" oninput="onOrderCustInput('waUser')">
+      <label>Celular (opcional)</label>
       <input id="ordCustPhone" type="tel" inputmode="numeric" autocomplete="off" placeholder="3001234567" value="${esc(orderCust.phone)}" oninput="onOrderCustInput('phone')">
       <div id="ordCustInfo" class="item-meta" style="margin-top:4px">${esc(orderCustInfoText())}</div>
       <label>Nombre *</label>
@@ -228,21 +243,23 @@ s = rep(s, """  const deliveryService = orderDeliveryManual ? (orderDeliveryServ
   if(orderType!=='domicilio' && orderType!=='llevar' && !(orderType==='local' && orderSpot)){ setOrderErr('Elige si el pedido es Domicilio, Para llevar o una mesa/barra del local (arriba).'); return; }
   let dom = null, custFields = {};
   if(orderType==='domicilio'){
-    const phone = normPhoneCO(orderCust.phone), name = (orderCust.name||'').trim(), address = (orderCust.address||'').trim();
-    if(!phone){ setOrderErr('Escribe el celular del cliente (10 dígitos).', 'ordCustPhone'); return; }
+    const phoneRaw = String(orderCust.phone||'').replace(/\\D/g,''), phone = phoneRaw ? normPhoneCO(phoneRaw) : '';
+    const waUser = normWaUser(orderCust.waUser), name = (orderCust.name||'').trim(), address = (orderCust.address||'').trim();
+    if(waUser===null){ setOrderErr('El usuario de WhatsApp empieza con @ y usa letras, números, punto o guion bajo.', 'ordCustWa'); return; }
+    if(phoneRaw && !phone){ setOrderErr('El celular debe tener 10 dígitos (o déjalo vacío).', 'ordCustPhone'); return; }
     if(!name){ setOrderErr('Escribe el nombre del cliente.', 'ordCustName'); return; }
     if(!address){ setOrderErr('Escribe la dirección del domicilio.', 'ordCustAddress'); return; }
     if(!(deliveryFee>0)){ setOrderErr('Elige la tarifa del domicilio.'); return; }
     let cid = null;
-    try{ cid = await TOM.rpc('upsert_customer', { p_phone: phone, p_name: name, p_address: address }); }
+    try{ cid = await TOM.rpc('upsert_customer', { p_phone: phone, p_wa_user: waUser, p_name: name, p_address: address }); }
     catch(e){ setOrderErr('No se pudo guardar el cliente: ' + ((e && e.message) || e)); return; }
-    dom = { phone, name, address };
-    custFields = { customerId: cid, customerName: name, customerPhone: phone, customerAddress: address };
+    dom = { phone, waUser, name, address };
+    custFields = { customerId: cid, customerName: name, customerPhone: phone, customerWaUser: waUser, customerAddress: address };
   }
   const placeFields = { orderType, spot: orderType==='local' ? orderSpot : '' };""")
-s = rep(s, "update({ items, total, deliveryFee, deliveryService });", "update({ items, total, deliveryFee, deliveryService, ...placeFields, ...custFields });")
+s = rep(s, "update({ items, total, deliveryFee, deliveryService });", "update({ items, total, subtotal, discount, discountAmount, deliveryFee, deliveryService, ...placeFields, ...custFields });")
 s = rep(s, "proposedDeliveryFee: deliveryFee, proposedDeliveryService: deliveryService,",
-           "proposedDeliveryFee: deliveryFee, proposedDeliveryService: deliveryService, proposedPlace: placeFields, proposedCustomer: custFields,")
+           "proposedDeliveryFee: deliveryFee, proposedDeliveryService: deliveryService, proposedPlace: placeFields, proposedCustomer: custFields, proposedDiscount: discount,")
 s = rep(s, """  } else if(custSel && custSel.value){
     const c = state.customers.find(x=>x.id===custSel.value);
     if(c){ customerId = c.id; customerName = c.name; customerPhone = c.phone||''; }
@@ -252,10 +269,10 @@ s = rep(s, """  } else if(custSel && custSel.value){
   }
   if(dom){ customerId = custFields.customerId; customerName = dom.name; customerPhone = dom.phone; }""")
 s = rep(s, "status:'pendiente', createdAt: Date.now(), customerId, customerName, customerPhone });",
-           "status:'pendiente', createdAt: Date.now(), customerId, customerName, customerPhone, customerAddress: dom ? dom.address : '', ...placeFields });")
+           "status:'pendiente', createdAt: Date.now(), customerId, customerName, customerPhone, customerAddress: dom ? dom.address : '', customerWaUser: dom ? dom.waUser : '', subtotal, discount, discountAmount, ...placeFields });")
 s = rep(s, """  orderDeliveryManual = false; orderDeliveryService = '';
   closeModal();""", """  orderDeliveryManual = false; orderDeliveryService = '';
-  orderType = ''; orderSpot = ''; orderCust = { phone:'', name:'', address:'', id:null, auto:false };
+  orderType = ''; orderSpot = ''; orderCust = { phone:'', waUser:'', name:'', address:'', id:null, auto:false };
   closeModal();""")
 
 # Lista de pedidos: mesa/barra o dirección
@@ -264,7 +281,7 @@ s = rep(s, "const title = o.customerName ? o.customerName : ('Pedido #'+(o.id||'
 s = rep(s, "      ${o.deliveryFee? `<div class=\"item-meta\">🛵 Domicilio: ${fmt(o.deliveryFee)}${o.deliveryService?' · '+esc(o.deliveryService):''}</div>`:''}",
 """      ${o.orderType==='local' && o.spot ? `<div class="item-meta" style="color:var(--fg);font-weight:700">🍽️ ${esc(o.spot)}</div>`:''}
       ${o.orderType==='llevar' ? `<div class="item-meta" style="color:var(--fg);font-weight:700">🥡 Para llevar (recoge en el local)</div>`:''}
-      ${o.orderType==='domicilio' && o.customerAddress ? `<div class="item-meta" style="color:var(--fg)">📍 ${esc(o.customerAddress)}${o.customerPhone?' · 📱 '+esc(phoneLast10(o.customerPhone)):''}</div>`:''}
+      ${o.orderType==='domicilio' && o.customerAddress ? `<div class="item-meta" style="color:var(--fg)">📍 ${esc(o.customerAddress)}${o.customerWaUser?' · 💬 '+esc(o.customerWaUser):''}${o.customerPhone?' · 📱 '+esc(phoneLast10(o.customerPhone)):''}</div>`:''}
       ${o.deliveryFee? `<div class="item-meta">🛵 Domicilio: ${fmt(o.deliveryFee)}${o.deliveryService?' · '+esc(o.deliveryService):''}</div>`:''}""")
 s = rep(s, "${o.customerName||('Pedido #'+(o.id||'').slice(0,5))}", "${o.customerName||o.spot||('Pedido #'+(o.id||'').slice(0,5))}")
 
@@ -285,6 +302,67 @@ s = rep(s, "    id: o.id, fecha: o.date, cliente: o.customerName||'', telefono: 
            "    id: o.id, fecha: o.date, tipo: o.orderType==='domicilio' ? 'Domicilio' : o.orderType==='llevar' ? 'Para llevar' : (o.orderType==='local' ? 'Local' : ''), ubicacion: o.spot||'', cliente: o.customerName||'', telefono: o.customerPhone||'', direccion: o.customerAddress||'',")
 s = rep(s, "return { id: c.id, nombre: c.name, telefono: c.phone||'', notas: c.notes||'',",
            "return { id: c.id, nombre: c.name, telefono: c.phone||'', direccion: c.address||'', notas: c.notes||'',")
+
+# v8: descuentos/promociones en el pedido, @usuario de WhatsApp en clientes, pago QR con comprobante
+s = rep(s, "    orderType = (o && o.orderType) || ''; orderSpot = (o && o.spot) || '';",
+           "    orderType = (o && o.orderType) || ''; orderSpot = (o && o.spot) || '';\n    orderDiscount = o && o.discount && o.discount.amount>0 ? { promoId:o.discount.promoId||'', name:o.discount.name||'', kind:o.discount.kind, value:o.discount.value, reason:'' } : null;")
+s = rep(s, "orderType = ''; orderSpot = ''; orderCust = { phone:'', waUser:'', name:'', address:'', id:null, auto:false };",
+           "orderType = ''; orderSpot = ''; orderDiscount = null; orderCust = { phone:'', waUser:'', name:'', address:'', id:null, auto:false };", 2)
+s = rep(s, """    <div id="cartWrap">${cartHtml}</div>""", """    <div id="cartWrap">${cartHtml}</div>
+    ${orderCart.length && (activePromos().length || can('ventas.descuento_libre') || orderDiscount) ? `
+    <label>Descuento / promoción</label>
+    <div class="ot-chips">
+      <button type="button" class="ot-chip${!orderDiscount?' on':''}" onclick="selectOrderDiscount(null)">Sin descuento</button>
+      ${activePromos().map(p=>`<button type="button" class="ot-chip${orderDiscount&&orderDiscount.promoId===p.id?' on':''}" onclick="selectOrderDiscount('${p.id}')">🏷️ ${esc(p.name)} (−${esc(promoLabel(p))})</button>`).join('')}
+      ${orderDiscount && orderDiscount.promoId && !activePromos().some(p=>p.id===orderDiscount.promoId) ? `<button type="button" class="ot-chip on">🏷️ ${esc(orderDiscount.name)}</button>` : ''}
+      ${can('ventas.descuento_libre') ? `<button type="button" class="ot-chip${orderDiscount&&!orderDiscount.promoId?' on':''}" onclick="selectOrderDiscount('libre')">✍️ Descuento libre</button>` : ''}
+    </div>
+    ${orderDiscount && !orderDiscount.promoId ? (can('ventas.descuento_libre') ? `
+      <div class="row" style="gap:10px;align-items:flex-end;flex-wrap:wrap">
+        <div style="flex:1;min-width:120px"><label>Tipo</label><select id="odKind" onchange="onFreeDiscountInput()"><option value="pct" ${orderDiscount.kind==='pct'?'selected':''}>Porcentaje %</option><option value="fixed" ${orderDiscount.kind==='fixed'?'selected':''}>Valor $</option></select></div>
+        <div style="flex:1;min-width:110px"><label>Valor</label><input id="odValue" type="number" inputmode="decimal" min="0" value="${orderDiscount.value||''}" oninput="onFreeDiscountInput()"></div>
+        <div style="flex:2;min-width:160px"><label>Motivo</label><input id="odReason" maxlength="80" placeholder="Ej: cliente frecuente" value="${esc(orderDiscount.reason||'')}" oninput="onFreeDiscountInput()"></div>
+      </div>` : `<div class="item-meta">Descuento libre aplicado por el administrador.</div>`) : ''}` : ''}""")
+s = rep(s, "  if(el) el.textContent = fmt(cartTotal + (orderDeliveryFee||0));",
+           "  const dsc = discountAmountFor(orderDiscount, cartTotal);\n  if(el) el.textContent = fmt(cartTotal - dsc + (orderDeliveryFee||0));\n  const br = document.getElementById('orderTotalBreak'); if(br) br.innerHTML = orderTotalBreakHtml(cartTotal, dsc);")
+s = rep(s, "  const total = cartTotal + (orderDeliveryFee||0);",
+           "  const total = cartTotal - discountAmountFor(orderDiscount, cartTotal) + (orderDeliveryFee||0);")
+s = rep(s, """<div class="item-name" id="orderTotalPreview" style="font-size:18px">${fmt(total)}</div>""",
+           """<div class="item-name" id="orderTotalPreview" style="font-size:18px">${fmt(total)}</div>
+    <div id="orderTotalBreak" class="item-meta">${orderTotalBreakHtml(cartTotal, discountAmountFor(orderDiscount, cartTotal))}</div>""")
+s = rep(s, "  const total = orderCart.reduce((s,l)=>s+l.price*l.qty,0) + deliveryFee;",
+"""  const subtotal = orderCart.reduce((s,l)=>s+l.price*l.qty,0);
+  if(orderDiscount && !orderDiscount.promoId && !(Number(orderDiscount.value)>0)){ setOrderErr('Escribe el valor del descuento o elige "Sin descuento".', 'odValue'); return; }
+  if(orderDiscount && !orderDiscount.promoId && orderDiscount.kind==='pct' && Number(orderDiscount.value)>100){ setOrderErr('El porcentaje no puede pasar de 100.', 'odValue'); return; }
+  const discountAmount = discountAmountFor(orderDiscount, subtotal);
+  const discount = orderDiscount && discountAmount>0 ? { promoId: orderDiscount.promoId||'',
+      name: orderDiscount.promoId ? orderDiscount.name : ('Descuento libre' + (orderDiscount.reason ? ': '+orderDiscount.reason : '')),
+      kind: orderDiscount.kind, value: Number(orderDiscount.value), amount: discountAmount, by: myUid } : null;
+  const total = subtotal - discountAmount + deliveryFee;""")
+# Tarjeta del pedido: descuento y estado del pago
+s = rep(s, "      ${o.deliveryFee? `<div class=\"item-meta\">🛵 Domicilio: ${fmt(o.deliveryFee)}${o.deliveryService?' · '+esc(o.deliveryService):''}</div>`:''}",
+           "      ${o.deliveryFee? `<div class=\"item-meta\">🛵 Domicilio: ${fmt(o.deliveryFee)}${o.deliveryService?' · '+esc(o.deliveryService):''}</div>`:''}\n      ${o.discountAmount>0 ? `<div class=\"item-meta\">🏷️ ${esc((o.discount&&o.discount.name)||'Descuento')}: −${fmt(o.discountAmount)}</div>`:''}")
+s = rep(s, """        ${o.paymentStatus==='pagado'
+          ? `<span class="pill good">Pagado · ${o.paymentMethodLabel||''}</span>`
+          : `<button class="secondary" style="width:auto;padding:6px 12px;font-size:12.5px" onclick="openCobroModal('${o.id}')">💰 Cobrar</button>`}""",
+           """        ${paymentBadgeHtml(o)}""")
+s = rep(s, """<button class="primary" onclick="confirmPayment('${o.id}','qr','QR')">✅ Confirmar pago recibido</button>""",
+           """<button class="primary" onclick="openQrProofModal('${o.id}')">📎 Registrar comprobante del pago</button>""")
+# Clientes: usuario de WhatsApp
+s = rep(s, """    <label>Dirección</label><input id="cuAddress" value="${c?esc(c.address||''):''}" placeholder="Calle, número, barrio e indicaciones">""",
+           """    <label>Usuario de WhatsApp</label><input id="cuWa" value="${c?esc(c.waUser||''):''}" placeholder="@usuario" autocapitalize="none" spellcheck="false">
+    <label>Dirección</label><input id="cuAddress" value="${c?esc(c.address||''):''}" placeholder="Calle, número, barrio e indicaciones">""")
+s = rep(s, """    address: document.getElementById('cuAddress').value.trim(),
+  };
+  if(!data.name) return;""", """    address: document.getElementById('cuAddress').value.trim(),
+    waUser: normWaUser(document.getElementById('cuWa').value),
+  };
+  if(!data.name){ toast('Escribe el nombre del cliente.'); return; }
+  if(data.waUser===null){ toast('El usuario de WhatsApp empieza con @ y usa letras, números, punto o guion bajo.'); return; }""")
+s = rep(s, "      ${c.address ? `<div class=\"item-meta\">📍 ${esc(c.address)}</div>` : ''}",
+           "      ${c.waUser ? `<div class=\"item-meta\">💬 ${esc(c.waUser)}</div>` : ''}\n      ${c.address ? `<div class=\"item-meta\">📍 ${esc(c.address)}</div>` : ''}")
+s = rep(s, "telefono: o.customerPhone||'', direccion: o.customerAddress||'',", "telefono: o.customerPhone||'', usuario_whatsapp: o.customerWaUser||'', direccion: o.customerAddress||'', descuento: o.discountAmount||0, promocion: (o.discount&&o.discount.name)||'', estado_pago: o.paymentStatus||'',")
+s = rep(s, "telefono: c.phone||'', direccion: c.address||'',", "telefono: c.phone||'', usuario_whatsapp: c.waUser||'', direccion: c.address||'',")
 
 # Etapa de cocina en la tarjeta del pedido (v7)
 s = rep(s, "      : '<span class=\"pill warn\">En cocina</span>';",
@@ -322,6 +400,8 @@ else:
     s = rep(s, marker, marker + "\n" + pre)
 post = "<script>\n" + (here / "analysis.js").read_text(encoding="utf-8") + "\n</script>\n"
 post += "<script>\n" + (here / "kitchen.js").read_text(encoding="utf-8") + "\n</script>\n"
+for extra_js in ("promos.js", "payments.js", "invoices.js"):
+    post += "<script>\n" + (here / extra_js).read_text(encoding="utf-8") + "\n</script>\n"
 post += "<script>\n" + (here / "auth.js").read_text(encoding="utf-8") + "\n</script>\n"
 post += "<script>\n" + (here / "history.js").read_text(encoding="utf-8") + "\n</script>\n"
 post += "<script>\n" + (here / "pwa.js").read_text(encoding="utf-8") + "\n</script>\n"
