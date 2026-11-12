@@ -22,7 +22,7 @@
     if(o.kitchenStage==='preparacion') return 'preparacion';
     return 'cola';
   };
-  const stageSince = (o, st)=> st==='cola' ? o.createdAt : st==='preparacion' ? (o.prepAt||o.createdAt)
+  const stageSince = (o, st)=> st==='cola' ? (o.confirmedAt||o.createdAt) : st==='preparacion' ? (o.prepAt||o.createdAt)
     : st==='horno' ? (o.ovenAt||o.prepAt||o.createdAt) : (o.readyAt||o.createdAt);
   window.orderPlaceLabel = function(o){
     if(o.orderType==='domicilio') return '🛵 Domicilio';
@@ -122,7 +122,7 @@
     }
     if(canOp && st!=='cola') actions += `<button class="ghost kds-alt" onclick="kitchenMove('${o.id}','atras')" title="Devolver a la etapa anterior">↩︎ Atrás</button>`;
     const steps = [];
-    if(o.prepAt) steps.push('espera '+clock(o.prepAt - o.createdAt));
+    if(o.prepAt) steps.push('espera '+clock(o.prepAt - (o.confirmedAt||o.createdAt)));
     if(o.prepAt && (o.ovenAt||o.readyAt)) steps.push('prep '+clock((o.ovenAt||o.readyAt) - o.prepAt));
     if(o.ovenAt && o.readyAt) steps.push('horno '+clock(o.readyAt - o.ovenAt));
     return `<div class="kds-card${isFresh?' kds-fresh':''}" data-id="${o.id}" data-since="${since||''}" data-limit="${LIMIT_MIN[st]}">
@@ -143,7 +143,7 @@
   window.renderKitchen = function(){
     if(!sec.classList.contains('active')) return;
     const today = todayStr();
-    const live = state.orders.filter(o=>o.status!=='entregado' && o.date >= addDaysStr(today,-1));
+    const live = state.orders.filter(o=>o.status!=='entregado' && o.webStatus!=='por_confirmar' && o.date >= addDaysStr(today,-1));
     // pedidos nuevos (para sonido y resaltado)
     const ids = new Set(live.filter(o=>kitchenStage(o)==='cola').map(o=>o.id));
     if(known){ let any = false; ids.forEach(id=>{ if(!known.has(id)){ fresh.set(id, Date.now()+8000); any = true; } }); if(any && soundOn) beep(); }
@@ -156,10 +156,10 @@
 
     // Promedios de hoy
     const todays = state.orders.filter(o=>o.date===today);
-    const wait = todays.filter(o=>o.prepAt).map(o=>o.prepAt-o.createdAt);
+    const wait = todays.filter(o=>o.prepAt).map(o=>o.prepAt-(o.confirmedAt||o.createdAt));
     const prep = todays.filter(o=>o.prepAt && (o.ovenAt||o.readyAt)).map(o=>(o.ovenAt||o.readyAt)-o.prepAt);
     const oven = todays.filter(o=>o.ovenAt && o.readyAt).map(o=>o.readyAt-o.ovenAt);
-    const total = todays.filter(o=>o.readyAt).map(o=>o.readyAt-o.createdAt);
+    const total = todays.filter(o=>o.readyAt).map(o=>o.readyAt-(o.confirmedAt||o.createdAt));
     const k = (v,l)=>`<div class="kpi"><div class="v">${v}</div><div class="l">${l}</div></div>`;
     const avgTxt = (a)=>{ const v = avg(a); return v==null ? '—' : clock(v); };
     document.getElementById('kdsKpis').innerHTML =
