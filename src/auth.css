@@ -58,3 +58,9 @@ body.kds-wide main { max-width: 1500px; }
 @media (prefers-reduced-motion: reduce){ .kds-card.kds-fresh { animation:none; border-color:var(--tm-red, #ff3035); } }
 .kds-kpis .kpi { padding:10px 12px; }
 .kds-kpis .kpi .v { font-size:20px; }
+
+/* Indicador de datos en vivo */
+.uc-live { color:#1a9b4b; font-size:11px; cursor:pointer; }
+.uc-live.off { color:var(--tm-red, #ff3035); animation:ucBlink 1s steps(2) infinite; }
+@keyframes ucBlink { 50% { opacity:.25; } }
+@media (prefers-reduced-motion: reduce){ .uc-live.off { animation:none; } }
