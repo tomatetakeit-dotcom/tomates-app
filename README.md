@@ -1,6 +1,6 @@
-# Tomates Pizzería · App de gestión
+# Tomates Pizza · App de gestión
 
-App web instalable (PWA) para ventas, cocina, caja, inventario, costeo, clientes y usuarios de Tomates Pizzería. Los datos viven en Supabase y la app se publica en Render.
+App web instalable (PWA) para ventas, cocina, caja, inventario, costeo, clientes y usuarios de Tomates Pizza. Los datos viven en Supabase y la app se publica en Render.
 
 - App: https://tomates-app.onrender.com/
 - Base de datos y acceso: Supabase, proyecto `tomates-app` (ref `ztvhtrfzycrocpknpsrr`)
@@ -28,6 +28,7 @@ App web instalable (PWA) para ventas, cocina, caja, inventario, costeo, clientes
 8. `supabase/08_tipo_pedido_clientes.sql` — tipo de pedido (Domicilio / Mesa / Barra) y `upsert_customer`: en domicilio el cliente queda guardado por celular con nombre y dirección.
 9. `supabase/09_cocina.sql` — rol **cocina**, permisos `cocina.ver` / `cocina.operar`, lectura de pedidos recientes para cocina y `set_kitchen_stage` (preparación → horno → listo, con hora de cada paso). Volver a desplegar la función `invite-user` (acepta el rol cocina).
 10. `supabase/10_promos_pagos_facturas.sql` — clientes por celular, **@usuario de WhatsApp** o dirección (`upsert_customer` de 4 datos); **promociones** (`promotions`) y regla de descuentos; **pagos QR** con comprobante (`confirm_qr_payment`, permiso `pagos.confirmar`); buckets privados `comprobantes` y `facturas`; tabla `invoices`.
+11. `supabase/11_cortesia_domicilio.sql` — descuento del 100% deja gratis también el domicilio (`deliveryDiscount`); pedidos en $0 quedan como cortesía sin cobro.
 
 Funciones (Edge Functions): `invite-user` (invitar por correo, crear usuario sin correo, poner contraseña temporal) y `read-invoice` (lee facturas con IA; necesita el secreto `ANTHROPIC_API_KEY`, opcional `ANTHROPIC_MODEL`).
 
