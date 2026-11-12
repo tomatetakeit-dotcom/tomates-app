@@ -257,9 +257,9 @@ s = rep(s, """  const deliveryService = orderDeliveryManual ? (orderDeliveryServ
     custFields = { customerId: cid, customerName: name, customerPhone: phone, customerWaUser: waUser, customerAddress: address };
   }
   const placeFields = { orderType, spot: orderType==='local' ? orderSpot : '' };""")
-s = rep(s, "update({ items, total, deliveryFee, deliveryService });", "update({ items, total, subtotal, discount, discountAmount, deliveryFee, deliveryService, ...placeFields, ...custFields });")
+s = rep(s, "update({ items, total, deliveryFee, deliveryService });", "update({ items, total, subtotal, discount, discountAmount, deliveryDiscount, deliveryFee, deliveryService, ...placeFields, ...custFields, ...(existingPaid(editingOrderId) ? {} : courtesy) });")
 s = rep(s, "proposedDeliveryFee: deliveryFee, proposedDeliveryService: deliveryService,",
-           "proposedDeliveryFee: deliveryFee, proposedDeliveryService: deliveryService, proposedPlace: placeFields, proposedCustomer: custFields, proposedDiscount: discount,")
+           "proposedDeliveryFee: deliveryFee, proposedDeliveryService: deliveryService, proposedPlace: placeFields, proposedCustomer: custFields, proposedDiscount: discount, proposedDeliveryDiscount: deliveryDiscount,")
 s = rep(s, """  } else if(custSel && custSel.value){
     const c = state.customers.find(x=>x.id===custSel.value);
     if(c){ customerId = c.id; customerName = c.name; customerPhone = c.phone||''; }
@@ -269,7 +269,7 @@ s = rep(s, """  } else if(custSel && custSel.value){
   }
   if(dom){ customerId = custFields.customerId; customerName = dom.name; customerPhone = dom.phone; }""")
 s = rep(s, "status:'pendiente', createdAt: Date.now(), customerId, customerName, customerPhone });",
-           "status:'pendiente', createdAt: Date.now(), customerId, customerName, customerPhone, customerAddress: dom ? dom.address : '', customerWaUser: dom ? dom.waUser : '', subtotal, discount, discountAmount, ...placeFields });")
+           "status:'pendiente', createdAt: Date.now(), customerId, customerName, customerPhone, customerAddress: dom ? dom.address : '', customerWaUser: dom ? dom.waUser : '', subtotal, discount, discountAmount, deliveryDiscount, ...courtesy, ...placeFields });")
 s = rep(s, """  orderDeliveryManual = false; orderDeliveryService = '';
   closeModal();""", """  orderDeliveryManual = false; orderDeliveryService = '';
   orderType = ''; orderSpot = ''; orderCust = { phone:'', waUser:'', name:'', address:'', id:null, auto:false };
@@ -324,9 +324,9 @@ s = rep(s, """    <div id="cartWrap">${cartHtml}</div>""", """    <div id="cartW
         <div style="flex:2;min-width:160px"><label>Motivo</label><input id="odReason" maxlength="80" placeholder="Ej: cliente frecuente" value="${esc(orderDiscount.reason||'')}" oninput="onFreeDiscountInput()"></div>
       </div>` : `<div class="item-meta">Descuento libre aplicado por el administrador.</div>`) : ''}` : ''}""")
 s = rep(s, "  if(el) el.textContent = fmt(cartTotal + (orderDeliveryFee||0));",
-           "  const dsc = discountAmountFor(orderDiscount, cartTotal);\n  if(el) el.textContent = fmt(cartTotal - dsc + (orderDeliveryFee||0));\n  const br = document.getElementById('orderTotalBreak'); if(br) br.innerHTML = orderTotalBreakHtml(cartTotal, dsc);")
+           "  const dsc = discountAmountFor(orderDiscount, cartTotal);\n  if(el) el.textContent = fmt(cartTotal - dsc + (orderDeliveryFee||0) - deliveryDiscountFor(orderDiscount, orderDeliveryFee));\n  const br = document.getElementById('orderTotalBreak'); if(br) br.innerHTML = orderTotalBreakHtml(cartTotal, dsc);")
 s = rep(s, "  const total = cartTotal + (orderDeliveryFee||0);",
-           "  const total = cartTotal - discountAmountFor(orderDiscount, cartTotal) + (orderDeliveryFee||0);")
+           "  const total = cartTotal - discountAmountFor(orderDiscount, cartTotal) + (orderDeliveryFee||0) - deliveryDiscountFor(orderDiscount, orderDeliveryFee);")
 s = rep(s, """<div class="item-name" id="orderTotalPreview" style="font-size:18px">${fmt(total)}</div>""",
            """<div class="item-name" id="orderTotalPreview" style="font-size:18px">${fmt(total)}</div>
     <div id="orderTotalBreak" class="item-meta">${orderTotalBreakHtml(cartTotal, discountAmountFor(orderDiscount, cartTotal))}</div>""")
@@ -338,10 +338,13 @@ s = rep(s, "  const total = orderCart.reduce((s,l)=>s+l.price*l.qty,0) + deliver
   const discount = orderDiscount && discountAmount>0 ? { promoId: orderDiscount.promoId||'',
       name: orderDiscount.promoId ? orderDiscount.name : ('Descuento libre' + (orderDiscount.reason ? ': '+orderDiscount.reason : '')),
       kind: orderDiscount.kind, value: Number(orderDiscount.value), amount: discountAmount, by: myUid } : null;
-  const total = subtotal - discountAmount + deliveryFee;""")
+  const deliveryDiscount = discount ? deliveryDiscountFor(orderDiscount, deliveryFee) : 0;
+  const total = Math.max(0, subtotal - discountAmount + deliveryFee - deliveryDiscount);
+  // Pedido en $0 (100% de descuento): queda como cortesía y no pasa por cobro
+  const courtesy = total<=0 ? { paymentStatus:'pagado', paymentMethod:'cortesia', paymentMethodLabel:'Cortesía (100% descuento)', paymentAmount:0, paidAt:Date.now(), paidDate:todayStr() } : {};""")
 # Tarjeta del pedido: descuento y estado del pago
 s = rep(s, "      ${o.deliveryFee? `<div class=\"item-meta\">🛵 Domicilio: ${fmt(o.deliveryFee)}${o.deliveryService?' · '+esc(o.deliveryService):''}</div>`:''}",
-           "      ${o.deliveryFee? `<div class=\"item-meta\">🛵 Domicilio: ${fmt(o.deliveryFee)}${o.deliveryService?' · '+esc(o.deliveryService):''}</div>`:''}\n      ${o.discountAmount>0 ? `<div class=\"item-meta\">🏷️ ${esc((o.discount&&o.discount.name)||'Descuento')}: −${fmt(o.discountAmount)}</div>`:''}")
+           "      ${o.deliveryFee? `<div class=\"item-meta\">🛵 Domicilio: ${fmt(o.deliveryFee)}${o.deliveryService?' · '+esc(o.deliveryService):''}</div>`:''}\n      ${o.discountAmount>0 ? `<div class=\"item-meta\">🏷️ ${esc((o.discount&&o.discount.name)||'Descuento')}: −${fmt(o.discountAmount)}${o.deliveryDiscount>0 ? ' · domicilio gratis (−'+fmt(o.deliveryDiscount)+')' : ''}</div>`:''}")
 s = rep(s, """        ${o.paymentStatus==='pagado'
           ? `<span class="pill good">Pagado · ${o.paymentMethodLabel||''}</span>`
           : `<button class="secondary" style="width:auto;padding:6px 12px;font-size:12.5px" onclick="openCobroModal('${o.id}')">💰 Cobrar</button>`}""",
@@ -364,6 +367,13 @@ s = rep(s, "      ${c.address ? `<div class=\"item-meta\">📍 ${esc(c.address)}
 s = rep(s, "telefono: o.customerPhone||'', direccion: o.customerAddress||'',", "telefono: o.customerPhone||'', usuario_whatsapp: o.customerWaUser||'', direccion: o.customerAddress||'', descuento: o.discountAmount||0, promocion: (o.discount&&o.discount.name)||'', estado_pago: o.paymentStatus||'',")
 s = rep(s, "telefono: c.phone||'', direccion: c.address||'',", "telefono: c.phone||'', usuario_whatsapp: c.waUser||'', direccion: c.address||'',")
 
+# v9: informes con domicilio cobrado real (100% de descuento lo regala)
+s = rep(s, "const cobrados = ordersInRange.reduce((s,o)=>s+(o.deliveryFee||0),0);", "const cobrados = ordersInRange.reduce((s,o)=>s+deliveryCharged(o),0);")
+s = rep(s, "const net = o => (o.total||0) - (o.deliveryFee||0);", "const net = o => (o.total||0) - deliveryCharged(o);")
+s = rep(s, "const domicilios = sumBy(cur, o=>o.deliveryFee||0);", "const domicilios = sumBy(cur, o=>deliveryCharged(o));")
+s = rep(s, "const ingresos = ordersInRange.reduce((s,o)=>s+((o.total||0)-(o.deliveryFee||0)),0);", "const ingresos = ordersInRange.reduce((s,o)=>s+((o.total||0)-deliveryCharged(o)),0);")
+s = rep(s, "const domiciliosCobrados = ordersInRange.reduce((s,o)=>s+(o.deliveryFee||0),0);", "const domiciliosCobrados = ordersInRange.reduce((s,o)=>s+deliveryCharged(o),0);")
+
 # Etapa de cocina en la tarjeta del pedido (v7)
 s = rep(s, "      : '<span class=\"pill warn\">En cocina</span>';",
            "      : (o.kitchenStage==='horno' ? '<span class=\"pill warn\">🔥 En horno</span>' : o.kitchenStage==='preparacion' ? '<span class=\"pill warn\">🔪 En preparación</span>' : '<span class=\"pill warn\">🧾 En cola</span>');")
@@ -383,8 +393,8 @@ head_extra = """<meta name="theme-color" content="#FF3035">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&display=swap">
 """
 s = rep(s, "</head>", f"{head_extra}<style>\n{css}\n</style>\n</head>")
-s = rep(s, "<title>Tomates App</title>", "<title>Tomates Pizzería</title>")
-s = rep(s, "<h1>Tomates App</h1>", "<h1>Tomates Pizzería</h1>")
+s = rep(s, "<title>Tomates App</title>", "<title>Tomates Pizza</title>")
+s = rep(s, "<h1>Tomates App</h1>", "<h1>Tomates Pizza</h1>")
 
 # 3) Librería Supabase + adaptador antes del script principal; acceso y ajustes después
 lib = '<script src="vendor/supabase.js"></script>' if mock else \
