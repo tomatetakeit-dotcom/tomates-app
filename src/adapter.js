@@ -41,6 +41,9 @@
     async rpc(fn, args){
       const { data, error } = await sb.rpc(fn, args||{});
       if(error) throw wrapErr(error);
+      // Funciones que cambian un pedido: se relee para verlo al instante en este equipo
+      if(args && args.p_order_id && TOM.refetchRow) TOM.refetchRow('orders', args.p_order_id);
+      if(fn==='approve_edit_request' && TOM.reloadTable){ TOM.reloadTable('orders'); TOM.reloadTable('edit_requests'); }
       return data;
     }
   };
@@ -77,11 +80,17 @@
     return out;
   }
 
+  /* ---------- Datos en vivo ----------
+     Cada tabla se carga completa y luego escucha cambios por Realtime. Si el equipo se
+     duerme, pierde internet o vence la sesión, el canal se cae sin avisar: por eso se
+     revisa la conexión al volver a la app, cada 30 s, y se recargan los datos. Además,
+     después de cada cambio hecho desde este equipo se relee esa fila de inmediato. */
   let chanSeq = 0;
+  const WATCHERS = {};          // tabla -> [{ rows, emit, mapRow, load, resub }]
   function watchTable(table, onRows, onErr, mapRow){
     const rows = new Map();
     const emit = ()=>{ try{ onRows([...rows.values()]); }catch(e){ console.error(e); } };
-    let alive = true;
+    let alive = true, ch = null;
     const load = async ()=>{
       try{
         const sel = table==='profiles'
@@ -93,18 +102,86 @@
         if(alive) emit();
       }catch(e){ onErr && onErr(e); }
     };
-    const ch = sb.channel('t_'+table+'_'+(++chanSeq))
-      .on('postgres_changes', { event:'*', schema:'public', table }, (p)=>{
-        if(p.eventType==='DELETE'){ const id = p.old && p.old.id; if(id!=null) rows.delete(id); }
-        else if(p.new && p.new.id!=null){ rows.set(p.new.id, mapRow(p.new)); }
-        emit();
-      })
-      .subscribe((status)=>{ if(status==='SUBSCRIBED') load(); });
+    const subscribe = ()=>{
+      if(ch){ try{ sb.removeChannel(ch); }catch(e){} }
+      ch = sb.channel('t_'+table+'_'+(++chanSeq))
+        .on('postgres_changes', { event:'*', schema:'public', table }, (p)=>{
+          if(p.eventType==='DELETE'){ const id = p.old && p.old.id; if(id!=null) rows.delete(id); }
+          else if(p.new && p.new.id!=null){ rows.set(p.new.id, mapRow(p.new)); }
+          emit();
+        })
+        .subscribe((status)=>{ if(status==='SUBSCRIBED') load(); setLive(); });
+      w.ch = ch;
+    };
+    const w = { rows, emit, mapRow, load, resub: subscribe, ch:null, get alive(){ return alive; } };
+    (WATCHERS[table] = WATCHERS[table] || []).push(w);
+    subscribe();
     load();
     TOM._reloaders = TOM._reloaders || [];
     TOM._reloaders.push(load);
     return ()=>{ alive=false; try{ sb.removeChannel(ch); }catch(e){} };
   }
+  // Aplica una fila nueva o actualizada (o la borra si row es null) en todas las vistas
+  function applyRow(table, id, row){
+    (WATCHERS[table]||[]).forEach(w=>{
+      if(!w.alive) return;
+      if(row) w.rows.set(id, w.mapRow(row)); else w.rows.delete(id);
+      w.emit();
+    });
+  }
+  async function refetchRow(table, id){
+    if(!WATCHERS[table] || id==null) return;
+    try{
+      const { data } = await sb.from(table).select('id,data,created_at').eq('id', id).maybeSingle();
+      applyRow(table, id, data || null);
+    }catch(e){}
+  }
+  TOM.refetchRow = refetchRow;
+  TOM.reloadTable = (table)=> Promise.all((WATCHERS[table]||[]).filter(w=>w.alive).map(w=>w.load()));
+
+  // Estado de la conexión en vivo
+  let lastLive = null;
+  function isLive(){
+    const rt = sb.realtime;
+    if(!rt || typeof rt.isConnected!=='function') return true;
+    if(!rt.isConnected()) return false;
+    const all = Object.values(WATCHERS).flat().filter(w=>w.alive && w.ch);
+    return all.every(w=>w.ch.state==='joined');
+  }
+  function setLive(){
+    const v = isLive();
+    if(v!==lastLive){ lastLive = v; TOM.live = v; try{ window.dispatchEvent(new CustomEvent('tomates:live', { detail:v })); }catch(e){} }
+  }
+  let resyncing = false, lastResync = 0;
+  async function resync(force){
+    if(resyncing || !TOM.user) return;
+    if(!force && Date.now()-lastResync < 5000) return;
+    resyncing = true; lastResync = Date.now();
+    try{
+      const { data } = await sb.auth.getSession();          // renueva la sesión si venció
+      const token = data && data.session && data.session.access_token;
+      if(token && sb.realtime && sb.realtime.setAuth) sb.realtime.setAuth(token);
+      if(sb.realtime && sb.realtime.isConnected && !sb.realtime.isConnected()) sb.realtime.connect();
+      Object.values(WATCHERS).flat().filter(w=>w.alive && (!w.ch || w.ch.state!=='joined')).forEach(w=>w.resub());
+      await Promise.all(Object.values(WATCHERS).flat().filter(w=>w.alive).map(w=>w.load()));
+    }catch(e){ console.warn('resync', e); }
+    finally{ resyncing = false; setLive(); }
+  }
+  TOM.resync = resync;
+  sb.auth.onAuthStateChange((ev, session)=>{
+    if(session && session.access_token && (ev==='TOKEN_REFRESHED' || ev==='SIGNED_IN') && sb.realtime && sb.realtime.setAuth) sb.realtime.setAuth(session.access_token);
+  });
+  document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='visible') resync(); });
+  window.addEventListener('focus', ()=>resync());
+  window.addEventListener('online', ()=>resync(true));
+  window.addEventListener('pageshow', (e)=>{ if(e.persisted) resync(true); });
+  setInterval(()=>{
+    if(document.visibilityState!=='visible' || !TOM.user) return;
+    setLive();
+    if(!isLive()) resync(true);
+  }, 30000);
+  // Red de seguridad: los pedidos se releen cada minuto mientras la app está a la vista
+  setInterval(()=>{ if(document.visibilityState==='visible' && TOM.user && WATCHERS.orders) TOM.reloadTable('orders'); }, 60000);
 
   function rolesCollection(){
     return {
@@ -127,16 +204,16 @@
     const docRef = (id)=>({
       id,
       async get(){ const { data, error } = await sb.from(table).select('data').eq('id', id).maybeSingle(); if(error) throw wrapErr(error); return snapDoc(id, data ? data.data : undefined); },
-      async set(obj){ const { error } = await sb.from(table).upsert({ id, data: obj }); if(error) throw wrapErr(error); },
-      async update(patch){ await TOM.rpc('merge_doc', { p_table: table, p_id: id, p_patch: patch }); },
-      async delete(){ const { error } = await sb.from(table).delete().eq('id', id); if(error) throw wrapErr(error); },
+      async set(obj){ const { error } = await sb.from(table).upsert({ id, data: obj }); if(error) throw wrapErr(error); refetchRow(table, id); },
+      async update(patch){ await TOM.rpc('merge_doc', { p_table: table, p_id: id, p_patch: patch }); refetchRow(table, id); },
+      async delete(){ const { error } = await sb.from(table).delete().eq('id', id); if(error) throw wrapErr(error); applyRow(table, id, null); },
       onSnapshot(cb, err){
         return watchTable(table, rows=>{ const r = rows.find(x=>x.id===id); cb(snapDoc(id, r ? r.data : undefined)); }, err, r=>({ id:r.id, data:r.data }));
       }
     });
     return {
       doc: docRef,
-      async add(obj){ const { data, error } = await sb.from(table).insert({ data: obj }).select('id').single(); if(error) throw wrapErr(error); return docRef(data.id); },
+      async add(obj){ const { data, error } = await sb.from(table).insert({ data: obj }).select('id').single(); if(error) throw wrapErr(error); refetchRow(table, data.id); return docRef(data.id); },
       onSnapshot(cb, err){ return watchTable(table, rows=>cb({ docs: rows.map(r=>snapDoc(r.id, r.data)) }), err, r=>({ id:r.id, data:r.data })); },
       orderBy(){ return this; }
     };
