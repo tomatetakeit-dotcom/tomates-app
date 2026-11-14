@@ -131,6 +131,7 @@
         <span class="kds-place">${escH(place)}</span>
       </div>
       ${who ? `<div class="kds-who">${who}</div>` : ''}
+      ${o.editedAt && Date.now()-o.editedAt < 20*60000 ? `<div class="kds-who" style="color:var(--bad);font-weight:800">✏️ Modificado ${fmtTime(o.editedAt)}</div>` : ''}
       <ul class="kds-items">${itemsHtml(o)}</ul>
       <div class="kds-times">
         <span class="kds-timer" title="Tiempo en esta etapa">⏱ <b>${clock(Date.now()-since)}</b></span>
@@ -140,6 +141,7 @@
     </div>`;
   }
 
+  const editSeen = new Map(); let editsReady = false;
   window.renderKitchen = function(){
     if(!sec.classList.contains('active')) return;
     const today = todayStr();
@@ -147,6 +149,11 @@
     // pedidos nuevos (para sonido y resaltado)
     const ids = new Set(live.filter(o=>kitchenStage(o)==='cola').map(o=>o.id));
     if(known){ let any = false; ids.forEach(id=>{ if(!known.has(id)){ fresh.set(id, Date.now()+8000); any = true; } }); if(any && soundOn) beep(); }
+    // pedidos modificados (agregaron o quitaron productos): resaltar y sonar
+    let anyEdit = false;
+    live.forEach(o=>{ if(!o.editedAt) return; const prev = editSeen.get(o.id); if(editsReady && prev !== o.editedAt){ fresh.set(o.id, Date.now()+8000); anyEdit = true; } editSeen.set(o.id, o.editedAt); });
+    if(anyEdit && soundOn) beep();
+    editsReady = true;
     known = new Set([...(known||[]), ...ids]);
 
     const canOp = TOM.can('cocina.operar');
