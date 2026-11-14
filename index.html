@@ -1167,6 +1167,7 @@ function renderOrders(){
       ${o.deliveryFee? `<div class="item-meta">🛵 Domicilio: ${fmt(o.deliveryFee)}${o.deliveryService?' · '+esc(o.deliveryService):''}</div>`:''}
       ${o.discountAmount>0 ? `<div class="item-meta">🏷️ ${esc((o.discount&&o.discount.name)||'Descuento')}: −${fmt(o.discountAmount)}${o.deliveryDiscount>0 ? ' · domicilio gratis (−'+fmt(o.deliveryDiscount)+')' : ''}</div>`:''}
       ${webOrderInfoHtml(o)}
+      ${orderEditInfoHtml(o)}
       ${timeline}
       <div class="row" style="margin-top:8px">
         <div class="item-name" style="font-size:15px">${fmt(o.total)}</div>
@@ -1460,10 +1461,10 @@ function renderOrderMainScreen(){
   `).join('') : '<div class="item-meta">Toca un producto arriba para agregarlo.</div>';
 
   const existingOrder = editingOrderId ? state.orders.find(x=>x.id===editingOrderId) : null;
-  const needsApproval = editingOrderId && !can('ventas.editar');
+  const needsApproval = editingOrderId && !canDirectEditOrder(editingOrderId);
   modalBody.innerHTML = `
     <h3>${editingOrderId ? 'Editar pedido' : 'Nuevo pedido'}</h3>
-    ${needsApproval ? '<div class="banner">Como cajero, este cambio quedará pendiente de aprobación de un administrador.</div>':''}
+    ${editingOrderId ? orderEditBannerHtml(editingOrderId) : ''}
     <label style="margin-top:4px">¿Dónde es el pedido? *</label>
     <div class="ot-chips">
       <button type="button" class="ot-chip${orderType==='domicilio'?' on':''}" onclick="selectOrderType('domicilio')">🛵 Domicilio</button>
@@ -1677,8 +1678,10 @@ async function saveOrder(){
   const courtesy = total<=0 ? { paymentStatus:'pagado', paymentMethod:'cortesia', paymentMethodLabel:'Cortesía (100% descuento)', paymentAmount:0, paidAt:Date.now(), paidDate:todayStr() } : {};
 
   if(editingOrderId){
-    if(can('ventas.editar')){
-      await db.collection('orders').doc(editingOrderId).update({ items, total, subtotal, discount, discountAmount, deliveryDiscount, deliveryFee, deliveryService, ...placeFields, ...custFields, ...(existingPaid(editingOrderId) ? {} : courtesy) });
+    if(canDirectEditOrder(editingOrderId)){
+      try{ await saveOrderEditDirect(editingOrderId, { items, total, subtotal, discount, discountAmount, deliveryDiscount, deliveryFee, deliveryService, ...placeFields, ...custFields }); }
+      catch(e){ setOrderErr((e && e.message) || String(e)); return; }
+      toast('Pedido actualizado', 'ok');
     } else {
       const mine = state.roles.find(r=>r.id===myUid);
       await db.collection('editRequests').add({
@@ -4246,6 +4249,7 @@ initDb();
         <span class="kds-place">${escH(place)}</span>
       </div>
       ${who ? `<div class="kds-who">${who}</div>` : ''}
+      ${o.editedAt && Date.now()-o.editedAt < 20*60000 ? `<div class="kds-who" style="color:var(--bad);font-weight:800">✏️ Modificado ${fmtTime(o.editedAt)}</div>` : ''}
       <ul class="kds-items">${itemsHtml(o)}</ul>
       <div class="kds-times">
         <span class="kds-timer" title="Tiempo en esta etapa">⏱ <b>${clock(Date.now()-since)}</b></span>
@@ -4255,6 +4259,7 @@ initDb();
     </div>`;
   }
 
+  const editSeen = new Map(); let editsReady = false;
   window.renderKitchen = function(){
     if(!sec.classList.contains('active')) return;
     const today = todayStr();
@@ -4262,6 +4267,11 @@ initDb();
     // pedidos nuevos (para sonido y resaltado)
     const ids = new Set(live.filter(o=>kitchenStage(o)==='cola').map(o=>o.id));
     if(known){ let any = false; ids.forEach(id=>{ if(!known.has(id)){ fresh.set(id, Date.now()+8000); any = true; } }); if(any && soundOn) beep(); }
+    // pedidos modificados (agregaron o quitaron productos): resaltar y sonar
+    let anyEdit = false;
+    live.forEach(o=>{ if(!o.editedAt) return; const prev = editSeen.get(o.id); if(editsReady && prev !== o.editedAt){ fresh.set(o.id, Date.now()+8000); anyEdit = true; } editSeen.set(o.id, o.editedAt); });
+    if(anyEdit && soundOn) beep();
+    editsReady = true;
     known = new Set([...(known||[]), ...ids]);
 
     const canOp = TOM.can('cocina.operar');
@@ -4530,20 +4540,39 @@ function orderTotalBreakHtml(sub, dsc){
       <label for="qpRef">Referencia o número de aprobación</label>
       <input id="qpRef" maxlength="40" autocomplete="off" placeholder="Ej: M1234567">
       <label>Foto del comprobante</label>
-      <input type="file" id="qpFile" accept="image/*" capture="environment" style="display:none">
-      <button type="button" class="secondary" style="width:100%" onclick="document.getElementById('qpFile').click()">📷 Tomar o elegir foto</button>
+      <input type="file" id="qpCam" accept="image/*" capture="environment" style="display:none">
+      <input type="file" id="qpFile" accept="image/*,application/pdf" style="display:none">
+      <div class="row" style="gap:8px">
+        <button type="button" class="secondary" style="flex:1" onclick="document.getElementById('qpCam').click()">📷 Tomar foto</button>
+        <button type="button" class="secondary" style="flex:1" onclick="document.getElementById('qpFile').click()">🖼️ Galería o archivos</button>
+      </div>
+      <div class="item-meta">Puedes subir la captura de pantalla del pago, una foto o el PDF del banco.</div>
       <img id="qpPrev" alt="Vista previa del comprobante" style="display:none;max-width:100%;max-height:260px;margin:8px auto 0;border-radius:10px;border:1px solid var(--border)">
+      <div id="qpPdf" class="item-meta" style="display:none;margin-top:8px;font-weight:700;color:var(--fg)"></div>
       ${canConfirm ? `<label style="display:flex;gap:8px;align-items:center;margin-top:12px"><input type="checkbox" id="qpVerified" style="width:auto"> Ya verifiqué que el dinero llegó a la cuenta</label>` : ''}
       <div id="qpErr" class="item-meta" style="color:var(--bad);font-weight:700"></div>
       <div class="modal-actions">
         <button class="secondary" onclick="openCobroModal('${o.id}')">Volver</button>
         <button class="primary" id="qpBtn" onclick="saveQrProof('${o.id}')">Guardar</button>
       </div>`;
-    document.getElementById('qpFile').addEventListener('change', async (e)=>{
+    const onProof = async (e)=>{
       const f = e.target.files && e.target.files[0]; if(!f) return;
-      try{ proofBlob = await tomatesCompressImage(f, 1400, 0.8); const pv = document.getElementById('qpPrev'); pv.src = URL.createObjectURL(proofBlob); pv.style.display = 'block'; }
-      catch(err){ document.getElementById('qpErr').textContent = err.message; }
-    });
+      const pv = document.getElementById('qpPrev'), pdf = document.getElementById('qpPdf');
+      document.getElementById('qpErr').textContent = '';
+      try{
+        if(f.type==='application/pdf' || /\.pdf$/i.test(f.name)){
+          if(f.size > 8*1024*1024) throw new Error('El PDF pesa más de 8 MB. Toma una captura de pantalla del pago.');
+          proofBlob = f.slice(0, f.size, 'application/pdf'); pv.style.display = 'none';
+          pdf.textContent = '📄 ' + f.name; pdf.style.display = 'block';
+        } else {
+          proofBlob = await tomatesCompressImage(f, 1400, 0.8);
+          pv.src = URL.createObjectURL(proofBlob); pv.style.display = 'block'; pdf.style.display = 'none';
+        }
+      }catch(err){ proofBlob = null; document.getElementById('qpErr').textContent = err.message; }
+      e.target.value = '';
+    };
+    document.getElementById('qpCam').addEventListener('change', onProof);
+    document.getElementById('qpFile').addEventListener('change', onProof);
     modalBg.classList.add('open');
   };
   window.saveQrProof = async function(orderId){
@@ -4556,8 +4585,9 @@ function orderTotalBreakHtml(sub, dsc){
     try{
       let path = '';
       if(proofBlob){
-        path = `${o.date||todayStr()}/${o.id}-${Date.now()}.jpg`;
-        const { error } = await sb.storage.from('comprobantes').upload(path, proofBlob, { contentType:'image/jpeg', upsert:false });
+        const isPdf = proofBlob.type==='application/pdf';
+        path = `${o.date||todayStr()}/${o.id}-${Date.now()}.${isPdf?'pdf':'jpg'}`;
+        const { error } = await sb.storage.from('comprobantes').upload(path, proofBlob, { contentType: isPdf ? 'application/pdf' : 'image/jpeg', upsert:false });
         if(error) throw new Error('No se pudo subir la foto: ' + TOM.friendly(error));
       }
       const mine = state.roles.find(r=>r.id===myUid);
@@ -4599,7 +4629,7 @@ function orderTotalBreakHtml(sub, dsc){
         <div class="row"><div class="item-name">${fmt(o.paymentAmount||o.total)}</div><span class="item-meta">#${escH((o.id||'').slice(0,5))}</span></div>
         <div class="item-meta">${escH(o.customerName || o.spot || '')} · ${o.paidAt ? fmtTime(o.paidAt) : ''} · registró ${escH(p.byName||'')}</div>
         <div class="item-meta">Referencia: <b>${escH(p.ref || '—')}</b></div>
-        ${url ? `<a href="${url}" target="_blank" rel="noopener"><img src="${url}" alt="Comprobante" style="max-width:100%;max-height:280px;margin-top:8px;border-radius:10px;border:1px solid var(--border)"></a>` : '<div class="item-meta">Sin foto</div>'}
+        ${url && /\.pdf$/i.test(p.path||'') ? `<a class="secondary" href="${url}" target="_blank" rel="noopener" style="display:inline-block;margin-top:8px;padding:8px 12px;text-decoration:none">📄 Abrir PDF del comprobante</a>` : url ? `<a href="${url}" target="_blank" rel="noopener"><img src="${url}" alt="Comprobante" style="max-width:100%;max-height:280px;margin-top:8px;border-radius:10px;border:1px solid var(--border)"></a>` : '<div class="item-meta">Sin foto</div>'}
         <input id="rj_${o.id}" placeholder="Motivo si lo rechazas (opcional)" maxlength="120" style="margin-top:8px">
         <div class="row" style="gap:8px;margin-top:8px">
           <button class="primary" style="flex:1" onclick="decideQr('${o.id}',true)">✅ Confirmar</button>
@@ -4685,15 +4715,19 @@ function orderTotalBreakHtml(sub, dsc){
     modalBody.innerHTML = `
       <h3>Factura por foto</h3>
       <div class="item-meta">Toma la foto de frente, con buena luz y la factura completa. La IA lee los datos y tú los revisas antes de guardar.</div>
-      <input type="file" id="ivFile" accept="image/*" capture="environment" style="display:none">
-      <button type="button" class="primary" style="width:100%;margin-top:12px" onclick="document.getElementById('ivFile').click()">📷 Tomar o elegir foto</button>
+      <input type="file" id="ivCam" accept="image/*" capture="environment" style="display:none">
+      <input type="file" id="ivFile" accept="image/*" style="display:none">
+      <div class="row" style="gap:8px;margin-top:12px">
+        <button type="button" class="primary" style="flex:1" onclick="document.getElementById('ivCam').click()">📷 Tomar foto</button>
+        <button type="button" class="secondary" style="flex:1" onclick="document.getElementById('ivFile').click()">🖼️ Galería o archivos</button>
+      </div>
       <img id="ivPrev" alt="Vista previa de la factura" style="display:none;max-width:100%;max-height:320px;margin:10px auto 0;border-radius:10px;border:1px solid var(--border)">
       <div id="ivMsg" class="item-meta" style="margin-top:8px"></div>
       <div class="modal-actions">
         <button class="secondary" onclick="closeModal()">Cancelar</button>
         <button class="secondary" onclick="startInvoiceReview(null)">Registrar a mano</button>
       </div>`;
-    document.getElementById('ivFile').addEventListener('change', async (e)=>{
+    const onInvoiceFile = async (e)=>{
       const f = e.target.files && e.target.files[0]; if(!f) return;
       const msg = document.getElementById('ivMsg');
       try{
@@ -4714,7 +4748,9 @@ function orderTotalBreakHtml(sub, dsc){
         if(inv.data && inv.data.legible===false){ msg.textContent = '⚠️ ' + (inv.data.observaciones || 'La foto no se ve clara.') + ' Puedes revisar y corregir.'; }
         startInvoiceReview(inv.data);
       }catch(err){ msg.textContent = '⚠️ ' + (err.message || err); }
-    });
+    };
+    document.getElementById('ivCam').addEventListener('change', onInvoiceFile);
+    document.getElementById('ivFile').addEventListener('change', onInvoiceFile);
     modalBg.classList.add('open');
   };
 
@@ -5231,6 +5267,184 @@ function orderTotalBreakHtml(sub, dsc){
 
   const _renderAll = window.renderAll;
   window.renderAll = function(){ _renderAll(); renderWebBanner(); renderWebBits(); };
+})();
+
+</script>
+<script>
+/* =====================================================================
+   Tomates — Administrar categorías de Gastos y Compras
+   Cambiar nombre, editar subcategorías, unir duplicadas y borrar.
+   Todo pasa por la función manage_category de la base, que también actualiza
+   los gastos/compras que usan el nombre (para que los informes cuadren).
+===================================================================== */
+(function(){
+  const TOM = window.TOM;
+  const escH = (s)=>String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const SCOPES = { gastos:{ perm:'gastos.gestionar', title:'Categorías de gastos', tab:'tab-gastos', list:'pendingExpensesBox', records:()=>state.expenses||[] },
+                   compras:{ perm:'compras.gestionar', title:'Categorías de compras', tab:'tab-compras', list:'purchasesList', records:()=>state.purchases||[] } };
+  const isLocked = (c)=> c.scope==='gastos' && c.name==='Domicilios';
+  const norm = (t)=> String(t||'').trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
+
+  Object.entries(SCOPES).forEach(([scope, cfg])=>{
+    const sec = document.getElementById(cfg.tab); if(!sec) return;
+    const btn = document.createElement('button');
+    btn.type = 'button'; btn.className = 'secondary'; btn.id = 'catMgr_'+scope;
+    btn.style.cssText = 'width:100%;margin:0 0 12px;display:none';
+    btn.textContent = '🗂️ ' + cfg.title;
+    btn.onclick = ()=>openCategoryManager(scope);
+    sec.insertBefore(btn, document.getElementById(cfg.list));
+  });
+  function paintButtons(){ Object.entries(SCOPES).forEach(([scope, cfg])=>{ const b = document.getElementById('catMgr_'+scope); if(b) b.style.display = TOM.can(cfg.perm) ? '' : 'none'; }); }
+
+  const usage = (scope, name)=> SCOPES[scope].records().filter(r=>r.category===name).length;
+
+  window.openCategoryManager = function(scope){
+    const cfg = SCOPES[scope];
+    const cats = (state.categories||[]).filter(c=>c.scope===scope).sort((a,b)=>String(a.name).localeCompare(String(b.name),'es'));
+    const dupKeys = {}; cats.forEach(c=>{ const k = norm(c.name); dupKeys[k] = (dupKeys[k]||0)+1; });
+    modalBody.innerHTML = `<h3>${escH(cfg.title)}</h3>
+      <div class="item-meta">Toca una categoría para cambiarle el nombre, editar sus subcategorías, unirla con otra o borrarla. Al cambiar un nombre también se actualizan los registros que lo usan.</div>
+      <div style="margin-top:10px">${cats.length ? cats.map(c=>{
+          const n = usage(scope, c.name);
+          return `<div class="card" style="cursor:pointer" onclick="openCategoryEdit('${c.id}')">
+            <div class="row"><div class="item-name">${escH(c.name)}${isLocked(c)?' 🔒':''}</div>
+              ${dupKeys[norm(c.name)]>1 ? '<span class="pill warn">Repetida</span>' : ''}</div>
+            <div class="item-meta">${(c.subcategories||[]).length ? escH((c.subcategories||[]).join(' · ')) : 'Sin subcategorías'} · ${n} registro${n===1?'':'s'}</div>
+          </div>`; }).join('') : '<div class="empty">No hay categorías.</div>'}</div>
+      <div class="modal-actions"><button class="secondary" onclick="closeModal()">Cerrar</button></div>`;
+    modalBg.classList.add('open');
+  };
+
+  window.openCategoryEdit = function(id){
+    const c = (state.categories||[]).find(x=>x.id===id); if(!c) return;
+    const scope = c.scope, locked = isLocked(c), n = usage(scope, c.name);
+    const others = (state.categories||[]).filter(x=>x.scope===scope && x.id!==id).sort((a,b)=>String(a.name).localeCompare(String(b.name),'es'));
+    modalBody.innerHTML = `<h3>Editar categoría</h3>
+      <div class="item-meta">${n===1 ? '1 registro usa' : n+' registros usan'} esta categoría.${locked ? ' 🔒 La app la usa para los pagos a domiciliarios: solo se pueden editar sus subcategorías.' : ''}</div>
+      <label for="ceName">Nombre</label>
+      <input id="ceName" maxlength="60" value="${escH(c.name)}" ${locked?'disabled':''}>
+      <label>Subcategorías</label>
+      <div id="ceSubs">${(c.subcategories||[]).map((s,i)=>`<div class="row ce-sub" style="gap:6px;margin-bottom:6px" data-from="${escH(s)}">
+          <input class="ce-sub-in" maxlength="60" value="${escH(s)}" style="flex:1" aria-label="Subcategoría ${i+1}">
+          <button type="button" class="ghost" onclick="this.parentElement.remove()" aria-label="Quitar subcategoría">🗑️</button></div>`).join('')}</div>
+      <button type="button" class="ghost" onclick="addCategorySubRow()">＋ Agregar subcategoría</button>
+      <div id="ceErr" class="item-meta" style="color:var(--bad);font-weight:700;margin-top:6px"></div>
+      <div class="modal-actions">
+        <button class="secondary" onclick="openCategoryManager('${scope}')">Volver</button>
+        <button class="primary" id="ceSave" onclick="saveCategoryEdit('${id}')">Guardar</button>
+      </div>
+      ${locked ? '' : `<div class="card" style="margin-top:14px">
+        <div class="item-name">Unir con otra categoría</div>
+        <div class="item-meta">Para categorías repetidas: ${n===1 ? 'el registro pasa' : 'los '+n+' registros pasan'} a la categoría elegida y esta se borra.</div>
+        <div class="row" style="gap:8px;margin-top:8px">
+          <select id="ceTarget" style="flex:1"><option value="">— elegir —</option>${others.map(o=>`<option value="${o.id}">${escH(o.name)}</option>`).join('')}</select>
+          <button class="secondary" type="button" onclick="mergeCategory('${id}')">Unir</button>
+        </div>
+      </div>
+      <div class="card" style="margin-top:10px">
+        <div class="item-name">Borrar categoría</div>
+        <div class="item-meta">${n ? `${n===1 ? 'El registro que la usa conserva' : 'Los '+n+' registros que la usan conservan'} el nombre como texto. Si es una categoría repetida, mejor únela con la otra.` : 'Ningún registro la usa.'}</div>
+        <button class="secondary" type="button" style="margin-top:8px;color:var(--bad)" id="ceDel" onclick="deleteCategory('${id}')">🗑️ Borrar categoría</button>
+      </div>`}`;
+    modalBg.classList.add('open');
+  };
+  window.addCategorySubRow = function(){
+    const wrap = document.getElementById('ceSubs');
+    const div = document.createElement('div'); div.className = 'row ce-sub'; div.style.cssText = 'gap:6px;margin-bottom:6px'; div.dataset.from = '';
+    div.innerHTML = `<input class="ce-sub-in" maxlength="60" placeholder="Nueva subcategoría" style="flex:1"><button type="button" class="ghost" onclick="this.parentElement.remove()" aria-label="Quitar subcategoría">🗑️</button>`;
+    wrap.appendChild(div); div.querySelector('input').focus();
+  };
+  const done = async (msg)=>{ toast(msg, 'ok'); await TOM.reloadTable('categories'); await Promise.all(['expenses','purchases','pending_expenses'].map(t=>TOM.reloadTable(t))); };
+  window.saveCategoryEdit = async function(id){
+    const c = (state.categories||[]).find(x=>x.id===id); if(!c) return;
+    const err = (m)=>{ document.getElementById('ceErr').textContent = m; };
+    const name = document.getElementById('ceName').value.trim();
+    if(!name) return err('Escribe el nombre de la categoría.');
+    const rows = [...document.querySelectorAll('#ceSubs .ce-sub')].map(r=>({ from: r.dataset.from || '', to: r.querySelector('input').value.trim() }));
+    const tos = rows.map(r=>r.to).filter(Boolean);
+    if(new Set(tos.map(norm)).size !== tos.length) return err('Hay subcategorías repetidas.');
+    const kept = new Set(rows.map(r=>r.from).filter(Boolean));
+    const subs = rows.filter(r=>r.from ? r.from!==r.to : r.to)
+      .concat((c.subcategories||[]).filter(s=>!kept.has(s)).map(s=>({ from:s, to:'' })));
+    const btn = document.getElementById('ceSave'); btn.disabled = true;
+    try{ await TOM.rpc('manage_category', { p_id:id, p_action:'rename', p_name:name, p_subs:subs }); }
+    catch(e){ btn.disabled = false; return err(e.message || String(e)); }
+    await done('Categoría guardada'); openCategoryManager(c.scope);
+  };
+  window.mergeCategory = async function(id){
+    const c = (state.categories||[]).find(x=>x.id===id); if(!c) return;
+    const target = document.getElementById('ceTarget').value;
+    const t = (state.categories||[]).find(x=>x.id===target);
+    if(!t) return document.getElementById('ceErr').textContent = 'Elige con cuál categoría unirla.';
+    if(!confirmInline('ceTarget', `¿Unir "${c.name}" con "${t.name}"? Toca Unir otra vez para confirmar.`)) return;
+    try{ await TOM.rpc('manage_category', { p_id:id, p_action:'merge', p_target:target }); }
+    catch(e){ return document.getElementById('ceErr').textContent = e.message || String(e); }
+    await done(`Unida con "${t.name}"`); openCategoryManager(c.scope);
+  };
+  window.deleteCategory = async function(id){
+    const c = (state.categories||[]).find(x=>x.id===id); if(!c) return;
+    if(!confirmInline('ceDel', '¿Seguro? Toca Borrar otra vez para confirmar.')) return;
+    try{ await TOM.rpc('manage_category', { p_id:id, p_action:'delete' }); }
+    catch(e){ return document.getElementById('ceErr').textContent = e.message || String(e); }
+    await done('Categoría borrada'); openCategoryManager(c.scope);
+  };
+  // Confirmación en dos toques (sin ventanas del navegador)
+  let armed = null;
+  function confirmInline(key, msg){
+    if(armed && armed.key===key && Date.now()-armed.at < 6000){ armed = null; return true; }
+    armed = { key, at: Date.now() }; document.getElementById('ceErr').textContent = msg; return false;
+  }
+
+  const _renderAll = window.renderAll;
+  window.renderAll = function(){ _renderAll(); paintButtons(); };
+})();
+
+</script>
+<script>
+/* =====================================================================
+   Tomates — Editar pedidos sin aprobación (vendedor) + historial de cambios
+   El vendedor (ventas.crear) agrega o quita productos mientras el pedido no esté
+   entregado ni cobrado; el administrador (ventas.editar) también si ya está cobrado.
+   Todo pasa por la función edit_order de la base, que valida precios y guarda el historial.
+===================================================================== */
+(function(){
+  const TOM = window.TOM;
+  const escH = (s)=>String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const isPaid = (o)=> (o.paymentStatus==='pagado' || o.paymentStatus==='por_confirmar') && o.paymentMethod!=='cortesia';
+
+  window.canDirectEditOrder = function(id){
+    const o = id && state.orders.find(x=>x.id===id); if(!o) return false;
+    if(o.status==='entregado' || o.webStatus==='por_confirmar') return false;
+    if(TOM.can('ventas.editar')) return true;
+    return TOM.can('ventas.crear') && !isPaid(o);
+  };
+  window.orderEditBannerHtml = function(id){
+    const o = id && state.orders.find(x=>x.id===id); if(!o) return '';
+    if(TOM.can('ventas.editar')) return isPaid(o) ? '<div class="banner">Este pedido ya está cobrado. Si cambias el total, revisa la diferencia con el cliente.</div>' : '';
+    if(canDirectEditOrder(id)) return `<div class="banner">Puedes agregar o quitar productos. El cambio queda registrado${o.status==='listo'?' y, si agregas productos, el pedido vuelve a cocina':''}.</div>`;
+    return '<div class="banner">Este pedido ya está cobrado: el cambio quedará pendiente de aprobación del administrador.</div>';
+  };
+  window.saveOrderEditDirect = async function(id, patch){
+    await TOM.rpc('edit_order', { p_order_id:id, p_patch:patch });
+  };
+
+  window.orderEditInfoHtml = function(o){
+    const log = o.editLog || []; if(!log.length) return '';
+    const last = log[log.length-1];
+    return `<div class="item-meta" style="margin-top:4px;cursor:pointer;text-decoration:underline dotted" onclick="openOrderEditLog('${o.id}')">✏️ Modificado por ${escH(last.byName||'')} · ${fmtTime(last.at)}${log.length>1?` · ${log.length} cambios`:''}</div>`;
+  };
+  window.openOrderEditLog = function(id){
+    const o = state.orders.find(x=>x.id===id); if(!o) return;
+    const log = (o.editLog||[]).slice().reverse();
+    modalBody.innerHTML = `<h3>Cambios del pedido #${escH(id.slice(0,5))}</h3>
+      ${log.map(e=>`<div class="card">
+        <div class="row"><div class="item-name" style="font-size:14px">${escH(e.byName||'')}</div><span class="item-meta">${fmtTime(e.at)}</span></div>
+        <div class="item-meta"><b>Antes:</b> ${escH(e.before)} — ${fmt(e.beforeTotal)}</div>
+        <div class="item-meta" style="color:var(--fg)"><b>Después:</b> ${escH(e.after)} — ${fmt(e.afterTotal)}</div>
+      </div>`).join('') || '<div class="empty">Sin cambios.</div>'}
+      <div class="modal-actions"><button class="secondary" onclick="closeModal()">Cerrar</button></div>`;
+    modalBg.classList.add('open');
+  };
 })();
 
 </script>
