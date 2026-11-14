@@ -31,6 +31,8 @@ App web instalable (PWA) para ventas, cocina, caja, inventario, costeo, clientes
 11. `supabase/11_cortesia_domicilio.sql` — descuento del 100% deja gratis también el domicilio (`deliveryDiscount`); pedidos en $0 quedan como cortesía sin cobro.
 12. `supabase/12_pedidos_web.sql` — pedidos desde la página pública `menu.html` (`public_menu`, `submit_web_order` para visitantes; `confirm_web_order` para el equipo). Los ajustes viven en `config/web` (WhatsApp, abierto/cerrado, mensaje, categorías ocultas).
 13. `supabase/13_cancelar_pedido_web.sql` — `cancel_web_order`: cancela (borra) un pedido web antes de entregarlo; con pago registrado solo el administrador.
+14. `supabase/14_gestionar_categorias.sql` — `manage_category`: renombrar, editar subcategorías, unir o borrar categorías de gastos/compras (actualiza los registros que usan el nombre).
+15. `supabase/15_editar_pedido.sql` — `edit_order`: el vendedor agrega o quita productos sin aprobación si el pedido no está entregado ni cobrado; valida precios, guarda historial (`editLog`) y devuelve a cocina si estaba Listo.
 
 Funciones (Edge Functions): `invite-user` (invitar por correo, crear usuario sin correo, poner contraseña temporal) y `read-invoice` (lee facturas con IA; necesita el secreto `ANTHROPIC_API_KEY`, opcional `ANTHROPIC_MODEL`).
 
