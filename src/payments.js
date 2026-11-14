@@ -52,20 +52,39 @@
       <label for="qpRef">Referencia o número de aprobación</label>
       <input id="qpRef" maxlength="40" autocomplete="off" placeholder="Ej: M1234567">
       <label>Foto del comprobante</label>
-      <input type="file" id="qpFile" accept="image/*" capture="environment" style="display:none">
-      <button type="button" class="secondary" style="width:100%" onclick="document.getElementById('qpFile').click()">📷 Tomar o elegir foto</button>
+      <input type="file" id="qpCam" accept="image/*" capture="environment" style="display:none">
+      <input type="file" id="qpFile" accept="image/*,application/pdf" style="display:none">
+      <div class="row" style="gap:8px">
+        <button type="button" class="secondary" style="flex:1" onclick="document.getElementById('qpCam').click()">📷 Tomar foto</button>
+        <button type="button" class="secondary" style="flex:1" onclick="document.getElementById('qpFile').click()">🖼️ Galería o archivos</button>
+      </div>
+      <div class="item-meta">Puedes subir la captura de pantalla del pago, una foto o el PDF del banco.</div>
       <img id="qpPrev" alt="Vista previa del comprobante" style="display:none;max-width:100%;max-height:260px;margin:8px auto 0;border-radius:10px;border:1px solid var(--border)">
+      <div id="qpPdf" class="item-meta" style="display:none;margin-top:8px;font-weight:700;color:var(--fg)"></div>
       ${canConfirm ? `<label style="display:flex;gap:8px;align-items:center;margin-top:12px"><input type="checkbox" id="qpVerified" style="width:auto"> Ya verifiqué que el dinero llegó a la cuenta</label>` : ''}
       <div id="qpErr" class="item-meta" style="color:var(--bad);font-weight:700"></div>
       <div class="modal-actions">
         <button class="secondary" onclick="openCobroModal('${o.id}')">Volver</button>
         <button class="primary" id="qpBtn" onclick="saveQrProof('${o.id}')">Guardar</button>
       </div>`;
-    document.getElementById('qpFile').addEventListener('change', async (e)=>{
+    const onProof = async (e)=>{
       const f = e.target.files && e.target.files[0]; if(!f) return;
-      try{ proofBlob = await tomatesCompressImage(f, 1400, 0.8); const pv = document.getElementById('qpPrev'); pv.src = URL.createObjectURL(proofBlob); pv.style.display = 'block'; }
-      catch(err){ document.getElementById('qpErr').textContent = err.message; }
-    });
+      const pv = document.getElementById('qpPrev'), pdf = document.getElementById('qpPdf');
+      document.getElementById('qpErr').textContent = '';
+      try{
+        if(f.type==='application/pdf' || /\.pdf$/i.test(f.name)){
+          if(f.size > 8*1024*1024) throw new Error('El PDF pesa más de 8 MB. Toma una captura de pantalla del pago.');
+          proofBlob = f.slice(0, f.size, 'application/pdf'); pv.style.display = 'none';
+          pdf.textContent = '📄 ' + f.name; pdf.style.display = 'block';
+        } else {
+          proofBlob = await tomatesCompressImage(f, 1400, 0.8);
+          pv.src = URL.createObjectURL(proofBlob); pv.style.display = 'block'; pdf.style.display = 'none';
+        }
+      }catch(err){ proofBlob = null; document.getElementById('qpErr').textContent = err.message; }
+      e.target.value = '';
+    };
+    document.getElementById('qpCam').addEventListener('change', onProof);
+    document.getElementById('qpFile').addEventListener('change', onProof);
     modalBg.classList.add('open');
   };
   window.saveQrProof = async function(orderId){
@@ -78,8 +97,9 @@
     try{
       let path = '';
       if(proofBlob){
-        path = `${o.date||todayStr()}/${o.id}-${Date.now()}.jpg`;
-        const { error } = await sb.storage.from('comprobantes').upload(path, proofBlob, { contentType:'image/jpeg', upsert:false });
+        const isPdf = proofBlob.type==='application/pdf';
+        path = `${o.date||todayStr()}/${o.id}-${Date.now()}.${isPdf?'pdf':'jpg'}`;
+        const { error } = await sb.storage.from('comprobantes').upload(path, proofBlob, { contentType: isPdf ? 'application/pdf' : 'image/jpeg', upsert:false });
         if(error) throw new Error('No se pudo subir la foto: ' + TOM.friendly(error));
       }
       const mine = state.roles.find(r=>r.id===myUid);
@@ -121,7 +141,7 @@
         <div class="row"><div class="item-name">${fmt(o.paymentAmount||o.total)}</div><span class="item-meta">#${escH((o.id||'').slice(0,5))}</span></div>
         <div class="item-meta">${escH(o.customerName || o.spot || '')} · ${o.paidAt ? fmtTime(o.paidAt) : ''} · registró ${escH(p.byName||'')}</div>
         <div class="item-meta">Referencia: <b>${escH(p.ref || '—')}</b></div>
-        ${url ? `<a href="${url}" target="_blank" rel="noopener"><img src="${url}" alt="Comprobante" style="max-width:100%;max-height:280px;margin-top:8px;border-radius:10px;border:1px solid var(--border)"></a>` : '<div class="item-meta">Sin foto</div>'}
+        ${url && /\.pdf$/i.test(p.path||'') ? `<a class="secondary" href="${url}" target="_blank" rel="noopener" style="display:inline-block;margin-top:8px;padding:8px 12px;text-decoration:none">📄 Abrir PDF del comprobante</a>` : url ? `<a href="${url}" target="_blank" rel="noopener"><img src="${url}" alt="Comprobante" style="max-width:100%;max-height:280px;margin-top:8px;border-radius:10px;border:1px solid var(--border)"></a>` : '<div class="item-meta">Sin foto</div>'}
         <input id="rj_${o.id}" placeholder="Motivo si lo rechazas (opcional)" maxlength="120" style="margin-top:8px">
         <div class="row" style="gap:8px;margin-top:8px">
           <button class="primary" style="flex:1" onclick="decideQr('${o.id}',true)">✅ Confirmar</button>
