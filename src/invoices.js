@@ -50,15 +50,19 @@
     modalBody.innerHTML = `
       <h3>Factura por foto</h3>
       <div class="item-meta">Toma la foto de frente, con buena luz y la factura completa. La IA lee los datos y tú los revisas antes de guardar.</div>
-      <input type="file" id="ivFile" accept="image/*" capture="environment" style="display:none">
-      <button type="button" class="primary" style="width:100%;margin-top:12px" onclick="document.getElementById('ivFile').click()">📷 Tomar o elegir foto</button>
+      <input type="file" id="ivCam" accept="image/*" capture="environment" style="display:none">
+      <input type="file" id="ivFile" accept="image/*" style="display:none">
+      <div class="row" style="gap:8px;margin-top:12px">
+        <button type="button" class="primary" style="flex:1" onclick="document.getElementById('ivCam').click()">📷 Tomar foto</button>
+        <button type="button" class="secondary" style="flex:1" onclick="document.getElementById('ivFile').click()">🖼️ Galería o archivos</button>
+      </div>
       <img id="ivPrev" alt="Vista previa de la factura" style="display:none;max-width:100%;max-height:320px;margin:10px auto 0;border-radius:10px;border:1px solid var(--border)">
       <div id="ivMsg" class="item-meta" style="margin-top:8px"></div>
       <div class="modal-actions">
         <button class="secondary" onclick="closeModal()">Cancelar</button>
         <button class="secondary" onclick="startInvoiceReview(null)">Registrar a mano</button>
       </div>`;
-    document.getElementById('ivFile').addEventListener('change', async (e)=>{
+    const onInvoiceFile = async (e)=>{
       const f = e.target.files && e.target.files[0]; if(!f) return;
       const msg = document.getElementById('ivMsg');
       try{
@@ -79,7 +83,9 @@
         if(inv.data && inv.data.legible===false){ msg.textContent = '⚠️ ' + (inv.data.observaciones || 'La foto no se ve clara.') + ' Puedes revisar y corregir.'; }
         startInvoiceReview(inv.data);
       }catch(err){ msg.textContent = '⚠️ ' + (err.message || err); }
-    });
+    };
+    document.getElementById('ivCam').addEventListener('change', onInvoiceFile);
+    document.getElementById('ivFile').addEventListener('change', onInvoiceFile);
     modalBg.classList.add('open');
   };
 
