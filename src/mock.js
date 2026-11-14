@@ -134,6 +134,18 @@
       Object.assign(r.data,{webStatus:'confirmado',confirmedAt:Date.now(),deliveryFee:fee,deliveryService:p_delivery_service||'',total:(r.data.subtotal||0)+fee}); notify('orders','UPDATE',r); return r.data; },
     cancel_web_order({p_order_id}){ const r=T.orders.find(x=>x.id===p_order_id); if(!r) throw {message:'El pedido ya no existe'}; if(r.data.source!=='web') throw {message:'Solo pedidos web'}; if(r.data.status==='entregado') throw {message:'El pedido ya fue entregado; no se puede cancelar'};
       T.orders=T.orders.filter(x=>x!==r); notify('orders','DELETE',null,r); return {deleted:true}; },
+    manage_category({p_id,p_action,p_name,p_subs,p_target}){ const c=T.categories.find(x=>x.id===p_id); if(!c) throw {message:'La categoría ya no existe'}; const recs=c.data.scope==='gastos'?T.expenses:T.purchases; const old=c.data.name;
+      if(p_action==='delete'){ T.categories=T.categories.filter(x=>x!==c); notify('categories','DELETE',null,c); return {ok:true}; }
+      if(p_action==='merge'){ const t=T.categories.find(x=>x.id===p_target); recs.forEach(r=>{ if(r.data.category===old){ r.data.category=t.data.name; notify(c.data.scope==='gastos'?'expenses':'purchases','UPDATE',r);} }); t.data.subcategories=[...new Set([...(t.data.subcategories||[]),...(c.data.subcategories||[])])]; T.categories=T.categories.filter(x=>x!==c); notify('categories','DELETE',null,c); notify('categories','UPDATE',t); return {ok:true}; }
+      if(T.categories.some(x=>x!==c&&x.data.scope===c.data.scope&&x.data.name.toLowerCase()===p_name.toLowerCase())) throw {message:'Ya existe una categoría "'+p_name+'". Usa "Unir con…" para juntarlas'};
+      let subs=[...(c.data.subcategories||[])]; (p_subs||[]).forEach(s=>{ if(!s.from){ if(s.to) subs.push(s.to);} else if(!s.to){ subs=subs.filter(x=>x!==s.from);} else { subs=subs.map(x=>x===s.from?s.to:x); recs.forEach(r=>{ if(r.data.category===old&&r.data.subcategory===s.from) r.data.subcategory=s.to; }); } });
+      c.data.name=p_name; c.data.subcategories=subs; recs.forEach(r=>{ if(r.data.category===old) r.data.category=p_name; }); notify('categories','UPDATE',c); return {ok:true}; },
+    edit_order({p_order_id,p_patch}){ const r=T.orders.find(x=>x.id===p_order_id); const p=me(); if(!r) throw {message:'El pedido ya no existe'}; if(r.data.status==='entregado') throw {message:'El pedido ya fue entregado; no se puede editar'};
+      const paid=['pagado','por_confirmar'].includes(r.data.paymentStatus)&&r.data.paymentMethod!=='cortesia'; if(paid&&p.role!=='admin') throw {message:'El pedido ya está cobrado. Solo el administrador puede cambiarlo'};
+      const before=(r.data.items||[]).map(i=>i.qty+'× '+i.name).join(', '), bt=r.data.total; const added=p_patch.items.some(i=>{ const o=(r.data.items||[]).find(x=>(x.productId||x.name)===(i.productId||i.name)); return !o||i.qty>o.qty; });
+      Object.assign(r.data,p_patch); if(added&&r.data.status==='listo'){ r.data.status='pendiente'; r.data.kitchenStage='preparacion'; delete r.data.readyAt; }
+      r.data.editLog=(r.data.editLog||[]).concat([{at:Date.now(),by:p.id,byName:p.name,before,after:p_patch.items.map(i=>i.qty+'× '+i.name).join(', '),beforeTotal:bt,afterTotal:p_patch.total}]); r.data.editedAt=Date.now(); r.data.editedByName=p.name;
+      notify('orders','UPDATE',r); return r.data; },
     set_user_role({p_user,p_role}){ const p=T.profiles.find(x=>x.id===p_user); p.role=p_role; notify('profiles','UPDATE',p); return null; },
   };
 
