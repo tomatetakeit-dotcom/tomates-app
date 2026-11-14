@@ -397,6 +397,20 @@ s = rep(s, "      ${timeline}\n      <div class=\"row\" style=\"margin-top:8px\"
 s = rep(s, "      if(st==='pendiente') parts.push('⏱ '+fmtDur(nowMs-o.createdAt)+' en cocina');",
            "      if(st==='pendiente' && o.webStatus==='por_confirmar') parts.push('⏱ '+fmtDur(nowMs-o.createdAt)+' esperando confirmación');\n      else if(st==='pendiente') parts.push('⏱ '+fmtDur(nowMs-(o.confirmedAt||o.createdAt))+' en cocina');")
 
+
+# v12: el vendedor edita pedidos directamente (edit_order) mientras no estén entregados ni cobrados
+s = rep(s, "const needsApproval = editingOrderId && !can('ventas.editar');", "const needsApproval = editingOrderId && !canDirectEditOrder(editingOrderId);")
+s = rep(s, "    ${needsApproval ? '<div class=\"banner\">Como cajero, este cambio quedará pendiente de aprobación de un administrador.</div>':''}",
+           "    ${editingOrderId ? orderEditBannerHtml(editingOrderId) : ''}")
+s = rep(s, """    if(can('ventas.editar')){
+      await db.collection('orders').doc(editingOrderId).update({ items, total, subtotal, discount, discountAmount, deliveryDiscount, deliveryFee, deliveryService, ...placeFields, ...custFields, ...(existingPaid(editingOrderId) ? {} : courtesy) });
+    } else {""", """    if(canDirectEditOrder(editingOrderId)){
+      try{ await saveOrderEditDirect(editingOrderId, { items, total, subtotal, discount, discountAmount, deliveryDiscount, deliveryFee, deliveryService, ...placeFields, ...custFields }); }
+      catch(e){ setOrderErr((e && e.message) || String(e)); return; }
+      toast('Pedido actualizado', 'ok');
+    } else {""")
+s = rep(s, "      ${webOrderInfoHtml(o)}\n      ${timeline}", "      ${webOrderInfoHtml(o)}\n      ${orderEditInfoHtml(o)}\n      ${timeline}")
+
 # 2) Estilos de acceso, chip de usuario y matriz de permisos
 css = (here / "auth.css").read_text(encoding="utf-8") + "\n" + (here / "brand.css").read_text(encoding="utf-8")
 head_extra = """<meta name="theme-color" content="#FF3035">
@@ -426,7 +440,7 @@ else:
     s = rep(s, marker, marker + "\n" + pre)
 post = "<script>\n" + (here / "analysis.js").read_text(encoding="utf-8") + "\n</script>\n"
 post += "<script>\n" + (here / "kitchen.js").read_text(encoding="utf-8") + "\n</script>\n"
-for extra_js in ("promos.js", "payments.js", "invoices.js", "whatsapp.js"):
+for extra_js in ("promos.js", "payments.js", "invoices.js", "whatsapp.js", "categories.js", "orderedit.js"):
     post += "<script>\n" + (here / extra_js).read_text(encoding="utf-8") + "\n</script>\n"
 post += "<script>\n" + (here / "auth.js").read_text(encoding="utf-8") + "\n</script>\n"
 post += "<script>\n" + (here / "history.js").read_text(encoding="utf-8") + "\n</script>\n"
