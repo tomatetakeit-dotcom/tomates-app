@@ -23,7 +23,9 @@
 
   const sb = (window.__TOMATES_SB_FACTORY__ || ((u,k,o)=>window.supabase.createClient(u,k,o)))(
     SUPABASE_URL, SUPABASE_KEY,
-    { auth: { persistSession:true, autoRefreshToken:true, detectSessionInUrl:true, flowType:'implicit' } }
+    { auth: { persistSession:true, autoRefreshToken:true, detectSessionInUrl:true, flowType:'implicit' },
+      // latidos en un Web Worker: el navegador no los congela cuando la pestaña queda atrás
+      realtime: { worker: true, heartbeatIntervalMs: 15000 } }
   );
 
   const TOM = window.TOM = {
@@ -90,7 +92,7 @@
   function watchTable(table, onRows, onErr, mapRow){
     const rows = new Map();
     const emit = ()=>{ try{ onRows([...rows.values()]); }catch(e){ console.error(e); } };
-    let alive = true, ch = null;
+    let alive = true, ch = null, retry = 0, retryT = null;
     const load = async ()=>{
       try{
         const sel = table==='profiles'
@@ -104,14 +106,21 @@
     };
     const subscribe = ()=>{
       if(ch){ try{ sb.removeChannel(ch); }catch(e){} }
-      ch = sb.channel('t_'+table+'_'+(++chanSeq))
-        .on('postgres_changes', { event:'*', schema:'public', table }, (p)=>{
+      const thisCh = sb.channel('t_'+table+'_'+(++chanSeq));
+      ch = thisCh; w.ch = thisCh;
+      thisCh.on('postgres_changes', { event:'*', schema:'public', table }, (p)=>{
           if(p.eventType==='DELETE'){ const id = p.old && p.old.id; if(id!=null) rows.delete(id); }
           else if(p.new && p.new.id!=null){ rows.set(p.new.id, mapRow(p.new)); }
           emit();
         })
-        .subscribe((status)=>{ if(status==='SUBSCRIBED') load(); setLive(); });
-      w.ch = ch;
+        .subscribe((status)=>{
+          if(status==='SUBSCRIBED'){ retry = 0; load(); }
+          // Si el canal falla, se vuelve a intentar solo (2 s, 4 s, 8 s… hasta 30 s), esté o no la app a la vista
+          else if(alive && (status==='CHANNEL_ERROR' || status==='TIMED_OUT') && w.ch===thisCh){
+            clearTimeout(retryT); retryT = setTimeout(()=>{ if(alive && w.ch===thisCh && thisCh.state!=='joined') subscribe(); }, Math.min(30000, 2000 * Math.pow(2, retry++)));
+          }
+          setLive();
+        });
     };
     const w = { rows, emit, mapRow, load, resub: subscribe, ch:null, get alive(){ return alive; } };
     (WATCHERS[table] = WATCHERS[table] || []).push(w);
