@@ -565,7 +565,9 @@ body.kds-wide main { max-width: 1500px; }
 
   const sb = (window.__TOMATES_SB_FACTORY__ || ((u,k,o)=>window.supabase.createClient(u,k,o)))(
     SUPABASE_URL, SUPABASE_KEY,
-    { auth: { persistSession:true, autoRefreshToken:true, detectSessionInUrl:true, flowType:'implicit' } }
+    { auth: { persistSession:true, autoRefreshToken:true, detectSessionInUrl:true, flowType:'implicit' },
+      // latidos en un Web Worker: el navegador no los congela cuando la pestaña queda atrás
+      realtime: { worker: true, heartbeatIntervalMs: 15000 } }
   );
 
   const TOM = window.TOM = {
@@ -632,7 +634,7 @@ body.kds-wide main { max-width: 1500px; }
   function watchTable(table, onRows, onErr, mapRow){
     const rows = new Map();
     const emit = ()=>{ try{ onRows([...rows.values()]); }catch(e){ console.error(e); } };
-    let alive = true, ch = null;
+    let alive = true, ch = null, retry = 0, retryT = null;
     const load = async ()=>{
       try{
         const sel = table==='profiles'
@@ -646,14 +648,21 @@ body.kds-wide main { max-width: 1500px; }
     };
     const subscribe = ()=>{
       if(ch){ try{ sb.removeChannel(ch); }catch(e){} }
-      ch = sb.channel('t_'+table+'_'+(++chanSeq))
-        .on('postgres_changes', { event:'*', schema:'public', table }, (p)=>{
+      const thisCh = sb.channel('t_'+table+'_'+(++chanSeq));
+      ch = thisCh; w.ch = thisCh;
+      thisCh.on('postgres_changes', { event:'*', schema:'public', table }, (p)=>{
           if(p.eventType==='DELETE'){ const id = p.old && p.old.id; if(id!=null) rows.delete(id); }
           else if(p.new && p.new.id!=null){ rows.set(p.new.id, mapRow(p.new)); }
           emit();
         })
-        .subscribe((status)=>{ if(status==='SUBSCRIBED') load(); setLive(); });
-      w.ch = ch;
+        .subscribe((status)=>{
+          if(status==='SUBSCRIBED'){ retry = 0; load(); }
+          // Si el canal falla, se vuelve a intentar solo (2 s, 4 s, 8 s… hasta 30 s), esté o no la app a la vista
+          else if(alive && (status==='CHANNEL_ERROR' || status==='TIMED_OUT') && w.ch===thisCh){
+            clearTimeout(retryT); retryT = setTimeout(()=>{ if(alive && w.ch===thisCh && thisCh.state!=='joined') subscribe(); }, Math.min(30000, 2000 * Math.pow(2, retry++)));
+          }
+          setLive();
+        });
     };
     const w = { rows, emit, mapRow, load, resub: subscribe, ch:null, get alive(){ return alive; } };
     (WATCHERS[table] = WATCHERS[table] || []).push(w);
@@ -952,7 +961,8 @@ function ensureDomiciliosCategory(){
     const exists = state.categories.some(c=>c.scope==='gastos' && c.name==='Domicilios');
     if(!exists){
       try{
-        await db.collection('categories').add({ scope:'gastos', name:'Domicilios', subcategories: DELIVERY_FEE_OPTIONS.map(v=>fmt(v)) });
+        // id fijo: aunque varios equipos lo intenten a la vez, queda una sola categoría
+        await db.collection('categories').doc('gastos-domicilios').set({ scope:'gastos', name:'Domicilios', subcategories: DELIVERY_FEE_OPTIONS.map(v=>fmt(v)) });
       }catch(e){ /* si ya la creó otro usuario casi al mismo tiempo, no pasa nada */ }
     }
   }, 900);
@@ -1167,6 +1177,7 @@ function renderOrders(){
       ${o.deliveryFee? `<div class="item-meta">🛵 Domicilio: ${fmt(o.deliveryFee)}${o.deliveryService?' · '+esc(o.deliveryService):''}</div>`:''}
       ${o.discountAmount>0 ? `<div class="item-meta">🏷️ ${esc((o.discount&&o.discount.name)||'Descuento')}: −${fmt(o.discountAmount)}${o.deliveryDiscount>0 ? ' · domicilio gratis (−'+fmt(o.deliveryDiscount)+')' : ''}</div>`:''}
       ${webOrderInfoHtml(o)}
+      ${orderLinksHtml(o)}
       ${orderEditInfoHtml(o)}
       ${timeline}
       <div class="row" style="margin-top:8px">
@@ -1181,7 +1192,7 @@ function renderOrders(){
         </div>` : ''}
       <div class="row" style="margin-top:6px">
         ${(o.customerPhone||o.customerWaUser)? `<button class="ghost" onclick="sendOrderWhatsApp('${o.id}')">📲 Avisar</button>`:''}
-        ${webCancelBtnHtml(o)}
+        ${webCancelBtnHtml(o)}${orderExtraBtnsHtml(o)}
         ${st!=='entregado' && o.webStatus!=='por_confirmar' ? (myPendingRequest
           ? `<span class="pill warn">Solicitud de cambio enviada</span>`
           : `<button class="ghost" onclick="openOrderModal('${o.id}')">✏️ Editar</button>`) : ''}
@@ -1370,7 +1381,7 @@ function openOrderModal(orderId){
     orderDeliveryManual = !!(o && (o.deliveryService || (orderDeliveryFee>0 && !DELIVERY_FEE_OPTIONS.includes(orderDeliveryFee))));
     orderDeliveryService = (o && o.deliveryService) || '';
     orderType = (o && o.orderType) || ''; orderSpot = (o && o.spot) || '';
-    orderDiscount = o && o.discount && o.discount.amount>0 ? { promoId:o.discount.promoId||'', name:o.discount.name||'', kind:o.discount.kind, value:o.discount.value, reason:'' } : null;
+    orderDiscount = o && o.discount && o.discount.amount>0 ? { promoId:o.discount.promoId||'', name:o.discount.name||'', kind:o.discount.kind, value:o.discount.value, reason: o.discount.reason || (o.discount.promoId ? '' : String(o.discount.name||'').replace(/^Descuento libre:?\s*/,'')), status: o.discount.status||'', orig:{ kind:o.discount.kind, value:o.discount.value, status:o.discount.status||'' } } : null;
     orderCust = { phone: o && o.orderType==='domicilio' ? phoneLast10(o.customerPhone) : '', waUser: (o && o.customerWaUser) || '', name: (o && o.orderType==='domicilio' && o.customerName) || '',
                   address: (o && o.customerAddress) || '', id: (o && o.customerId) || null, auto:false };
   } else {
@@ -1464,7 +1475,7 @@ function renderOrderMainScreen(){
   const needsApproval = editingOrderId && !canDirectEditOrder(editingOrderId);
   modalBody.innerHTML = `
     <h3>${editingOrderId ? 'Editar pedido' : 'Nuevo pedido'}</h3>
-    ${editingOrderId ? orderEditBannerHtml(editingOrderId) : ''}
+    ${editingOrderId ? orderEditBannerHtml(editingOrderId) : (orderAddonOf ? addonBannerHtml() : '')}
     <label style="margin-top:4px">¿Dónde es el pedido? *</label>
     <div class="ot-chips">
       <button type="button" class="ot-chip${orderType==='domicilio'?' on':''}" onclick="selectOrderType('domicilio')">🛵 Domicilio</button>
@@ -1475,23 +1486,24 @@ function renderOrderMainScreen(){
     <div class="prod-grid">${gridHtml}</div>
     <label style="margin-top:14px">Carrito</label>
     <div id="cartWrap">${cartHtml}</div>
-    ${orderCart.length && (activePromos().length || can('ventas.descuento_libre') || orderDiscount) ? `
+    ${orderCart.length && (activePromos().length || can('ventas.descuento_libre') || can('ventas.crear') || orderDiscount) ? `
     <label>Descuento / promoción</label>
     <div class="ot-chips">
       <button type="button" class="ot-chip${!orderDiscount?' on':''}" onclick="selectOrderDiscount(null)">Sin descuento</button>
       ${activePromos().map(p=>`<button type="button" class="ot-chip${orderDiscount&&orderDiscount.promoId===p.id?' on':''}" onclick="selectOrderDiscount('${p.id}')">🏷️ ${esc(p.name)} (−${esc(promoLabel(p))})</button>`).join('')}
       ${orderDiscount && orderDiscount.promoId && !activePromos().some(p=>p.id===orderDiscount.promoId) ? `<button type="button" class="ot-chip on">🏷️ ${esc(orderDiscount.name)}</button>` : ''}
-      ${can('ventas.descuento_libre') ? `<button type="button" class="ot-chip${orderDiscount&&!orderDiscount.promoId?' on':''}" onclick="selectOrderDiscount('libre')">✍️ Descuento libre</button>` : ''}
+      ${can('ventas.descuento_libre') || can('ventas.crear') ? `<button type="button" class="ot-chip${orderDiscount&&!orderDiscount.promoId?' on':''}" onclick="selectOrderDiscount('libre')">${can('ventas.descuento_libre') ? '✍️ Descuento libre' : '✍️ Descuento (por aprobar)'}</button>` : ''}
     </div>
-    ${orderDiscount && !orderDiscount.promoId ? (can('ventas.descuento_libre') ? `
+    ${orderDiscount && !orderDiscount.promoId ? (can('ventas.descuento_libre') || freeDiscountEditable(orderDiscount) ? `
       <div class="row" style="gap:10px;align-items:flex-end;flex-wrap:wrap">
         <div style="flex:1;min-width:120px"><label>Tipo</label><select id="odKind" onchange="onFreeDiscountInput()"><option value="pct" ${orderDiscount.kind==='pct'?'selected':''}>Porcentaje %</option><option value="fixed" ${orderDiscount.kind==='fixed'?'selected':''}>Valor $</option></select></div>
         <div style="flex:1;min-width:110px"><label>Valor</label><input id="odValue" type="number" inputmode="decimal" min="0" value="${orderDiscount.value||''}" oninput="onFreeDiscountInput()"></div>
         <div style="flex:2;min-width:160px"><label>Motivo</label><input id="odReason" maxlength="80" placeholder="Ej: cliente frecuente" value="${esc(orderDiscount.reason||'')}" oninput="onFreeDiscountInput()"></div>
-      </div>` : `<div class="item-meta">Descuento libre aplicado por el administrador.</div>`) : ''}` : ''}
+      </div>${can('ventas.descuento_libre') ? '' : '<div class="item-meta">⏳ Este descuento queda <b>por aprobar</b> del administrador. Escribe el motivo.</div>'}` : `<div class="item-meta">${orderDiscount.status==='por_aprobar' ? '⏳ Descuento por aprobar del administrador.' : 'Descuento libre aplicado por el administrador.'}</div>`) : ''}` : ''}
     ${orderType==='domicilio' ? `
     <div class="ot-cust">
-      <label style="margin-top:0">Usuario de WhatsApp</label>
+      ${customerSearchHtml()}
+      <label>Usuario de WhatsApp</label>
       <input id="ordCustWa" type="text" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="@usuario" value="${esc(orderCust.waUser)}" oninput="onOrderCustInput('waUser')">
       <label>Celular (opcional)</label>
       <input id="ordCustPhone" type="tel" inputmode="numeric" autocomplete="off" placeholder="3001234567" value="${esc(orderCust.phone)}" oninput="onOrderCustInput('phone')">
@@ -1527,7 +1539,7 @@ function renderOrderMainScreen(){
     ${orderType!=='domicilio' ? `<label>Cliente (opcional, para enviar el pedido por WhatsApp)</label>
     <select id="orderCustomer" onchange="toggleNewCustomerFields()">
       <option value="">— sin cliente —</option>
-      ${state.customers.map(c=>`<option value="${c.id}" ${existingOrder&&existingOrder.customerId===c.id?'selected':''}>${c.name}</option>`).join('')}
+      ${[...state.customers].sort((a,b)=>(a.name||'').localeCompare(b.name||'')).map(c=>`<option value="${c.id}" ${existingOrder&&existingOrder.customerId===c.id?'selected':''}>${esc(customerLabel(c))}</option>`).join('')}
       <option value="__new__">+ Nuevo cliente</option>
     </select>
     <div id="newCustomerFields" style="display:none">
@@ -1657,7 +1669,7 @@ async function saveOrder(){
     if(phoneRaw && !phone){ setOrderErr('El celular debe tener 10 dígitos (o déjalo vacío).', 'ordCustPhone'); return; }
     if(!name){ setOrderErr('Escribe el nombre del cliente.', 'ordCustName'); return; }
     if(!address){ setOrderErr('Escribe la dirección del domicilio.', 'ordCustAddress'); return; }
-    if(!(deliveryFee>0)){ setOrderErr('Elige la tarifa del domicilio.'); return; }
+    if(!(deliveryFee>0) && !orderAddonOf){ setOrderErr('Elige la tarifa del domicilio.'); return; }
     let cid = null;
     try{ cid = await TOM.rpc('upsert_customer', { p_phone: phone, p_wa_user: waUser, p_name: name, p_address: address }); }
     catch(e){ setOrderErr('No se pudo guardar el cliente: ' + ((e && e.message) || e)); return; }
@@ -1668,10 +1680,11 @@ async function saveOrder(){
   const subtotal = orderCart.reduce((s,l)=>s+l.price*l.qty,0);
   if(orderDiscount && !orderDiscount.promoId && !(Number(orderDiscount.value)>0)){ setOrderErr('Escribe el valor del descuento o elige "Sin descuento".', 'odValue'); return; }
   if(orderDiscount && !orderDiscount.promoId && orderDiscount.kind==='pct' && Number(orderDiscount.value)>100){ setOrderErr('El porcentaje no puede pasar de 100.', 'odValue'); return; }
+  if(orderDiscount && !orderDiscount.promoId && discountExtraFields(orderDiscount).status==='por_aprobar' && !String(orderDiscount.reason||'').trim()){ setOrderErr('Escribe el motivo del descuento: lo revisa el administrador.', 'odReason'); return; }
   const discountAmount = discountAmountFor(orderDiscount, subtotal);
   const discount = orderDiscount && discountAmount>0 ? { promoId: orderDiscount.promoId||'',
       name: orderDiscount.promoId ? orderDiscount.name : ('Descuento libre' + (orderDiscount.reason ? ': '+orderDiscount.reason : '')),
-      kind: orderDiscount.kind, value: Number(orderDiscount.value), amount: discountAmount, by: myUid } : null;
+      kind: orderDiscount.kind, value: Number(orderDiscount.value), amount: discountAmount, by: myUid, ...discountExtraFields(orderDiscount) } : null;
   const deliveryDiscount = discount ? deliveryDiscountFor(orderDiscount, deliveryFee) : 0;
   const total = Math.max(0, subtotal - discountAmount + deliveryFee - deliveryDiscount);
   // Pedido en $0 (100% de descuento): queda como cortesía y no pasa por cobro
@@ -1710,7 +1723,7 @@ async function saveOrder(){
     if(c){ customerId = c.id; customerName = c.name; customerPhone = c.phone||''; }
   }
   if(dom){ customerId = custFields.customerId; customerName = dom.name; customerPhone = dom.phone; }
-  await db.collection('orders').add({ date: todayStr(), items, total, deliveryFee, deliveryService, status:'pendiente', createdAt: Date.now(), customerId, customerName, customerPhone, customerAddress: dom ? dom.address : '', customerWaUser: dom ? dom.waUser : '', subtotal, discount, discountAmount, deliveryDiscount, ...courtesy, ...placeFields });
+  await db.collection('orders').add({ date: todayStr(), items, total, deliveryFee, deliveryService, status:'pendiente', createdAt: Date.now(), customerId, customerName, customerPhone, customerAddress: dom ? dom.address : '', customerWaUser: dom ? dom.waUser : '', subtotal, discount, discountAmount, deliveryDiscount, ...courtesy, ...placeFields, ...(orderAddonOf ? { addonOf: orderAddonOf } : {}) });
   orderCart = [];
   orderDeliveryFee = 0;
   orderDeliveryManual = false; orderDeliveryService = '';
@@ -2456,6 +2469,7 @@ function buildCashLedger(){
   const today = todayStr();
   const sumBy = (arr, keyFn, valFn) => { const m = {}; arr.forEach(x=>{ const k = keyFn(x); if(k) m[k] = (m[k]||0) + valFn(x); }); return m; };
   const sales = sumBy(state.orders.filter(o=>o.paymentStatus==='pagado' && o.paymentMethod==='efectivo'), cashOrderDate, o=>o.paymentAmount||o.total||0);
+  state.orders.forEach(o=>(o.extraPayments||[]).forEach(p=>{ if(p.method==='efectivo' && p.date) sales[p.date] = (sales[p.date]||0) + (Number(p.amount)||0); }));
   const exps = sumBy(state.expenses.filter(e=>e.paymentMethod==='efectivo'), e=>e.date, e=>e.amount||0);
   const purs = sumBy(state.purchases.filter(p=>p.paymentMethod==='efectivo'), p=>p.date, p=>p.totalCost||0);
   const outs = sumBy(state.cashMovements.filter(m=>m.type==='entrega'||m.type==='consignacion'), m=>m.date, m=>m.amount||0);
@@ -2957,7 +2971,7 @@ function renderCustomers(){
         <div class="item-name">${c.name}</div>
         <span class="pill accent">${st.count} pedidos</span>
       </div>
-      <div class="item-meta">${c.phone||'Sin WhatsApp'}${st.lastDate?(' · último pedido '+st.lastDate):''}</div>
+      <div class="item-meta">${c.phone ? '📱 '+fmtPhone(c.phone) : 'Sin celular'}${st.lastDate?(' · último pedido '+st.lastDate):''}</div>
       ${c.waUser ? `<div class="item-meta">💬 ${esc(c.waUser)}</div>` : ''}
       ${c.address ? `<div class="item-meta">📍 ${esc(c.address)}</div>` : ''}
       <div class="row" style="margin-top:6px"><span class="item-meta">Total gastado: ${fmt(st.total)}</span></div>
@@ -3868,6 +3882,12 @@ initDb();
     <div class="segmented" id="anGroup">
       <button data-g="dia">Día</button><button data-g="semana" class="active">Semana</button><button data-g="mes">Mes</button>
     </div>
+    <div class="row" style="gap:8px;margin-top:8px;align-items:center">
+      <button class="ghost" id="anPrev" type="button" aria-label="Periodo anterior" style="font-size:20px;padding:6px 14px">‹</button>
+      <div id="anLabel" class="item-name" style="flex:1;text-align:center"></div>
+      <button class="ghost" id="anNext" type="button" aria-label="Periodo siguiente" style="font-size:20px;padding:6px 14px">›</button>
+    </div>
+    <div class="item-meta" style="margin-top:4px">Elige Día, Semana o Mes y muévete con ‹ ›. También puedes poner un rango a mano.</div>
     <div class="grid2">
       <div><label for="anFrom">Desde</label><input id="anFrom" type="date"></div>
       <div><label for="anTo">Hasta</label><input id="anTo" type="date"></div>
@@ -3889,18 +3909,57 @@ initDb();
     renderAnalysis();
   });
 
+  // Periodo elegido: el día, la semana (lunes a domingo) o el mes que contiene "anchor".
+  // Dentro del periodo se agrupa por día (día y semana) o por semana (mes). 'custom' = rango a mano.
+  let period = 'semana', anchor = null;
+  const lastOfMonth = (s)=>{ const d = toDate(s); d.setMonth(d.getMonth()+1, 0); return ds(d); };
+  function periodRange(){
+    const a = anchor || todayStr();
+    if(period==='dia') return [a, a];
+    if(period==='semana'){ const m = monday(a); return [m, addDays(m,6)]; }
+    const f = a.slice(0,8)+'01'; return [f, lastOfMonth(f)];
+  }
+  function periodLabel(from, to){
+    const f = toDate(from), t = toDate(to);
+    if(period==='dia') return `${['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'][f.getDay()]} ${f.getDate()} ${MES[f.getMonth()]} ${f.getFullYear()}` + (from===todayStr()?' (hoy)':'');
+    if(period==='semana') return `Semana del ${f.getDate()} ${MES[f.getMonth()]} al ${t.getDate()} ${MES[t.getMonth()]}` + (from<=todayStr() && todayStr()<=to ? ' (esta semana)' : '');
+    if(period==='mes') return `${['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'][f.getMonth()]} ${f.getFullYear()}` + (from<=todayStr() && todayStr()<=to ? ' (este mes)' : '');
+    return `Del ${f.getDate()} ${MES[f.getMonth()]} ${f.getFullYear()} al ${t.getDate()} ${MES[t.getMonth()]} ${t.getFullYear()}`;
+  }
   function setDefaults(){
-    const to = todayStr();
-    const from = group==='dia' ? addDays(to,-13) : group==='semana' ? addDays(monday(to),-7*7) : (()=>{ const d = toDate(to); d.setMonth(d.getMonth()-5); d.setDate(1); return ds(d); })();
+    if(period==='custom') return;
+    const [from, to] = periodRange();
+    group = period==='mes' ? 'semana' : 'dia';
     document.getElementById('anFrom').value = from; document.getElementById('anTo').value = to;
   }
-  setDefaults();
+  function paintPeriod(){
+    sec.querySelectorAll('#anGroup button').forEach(x=>x.classList.toggle('active', x.dataset.g===period));
+    const from = document.getElementById('anFrom').value, to = document.getElementById('anTo').value;
+    document.getElementById('anLabel').textContent = from && to ? periodLabel(from, to) : '';
+    document.getElementById('anPrev').style.visibility = document.getElementById('anNext').style.visibility = period==='custom' ? 'hidden' : '';
+  }
+  setDefaults(); paintPeriod();
   sec.querySelectorAll('#anGroup button').forEach(b=>b.addEventListener('click', ()=>{
-    group = b.dataset.g;
-    sec.querySelectorAll('#anGroup button').forEach(x=>x.classList.toggle('active', x===b));
-    setDefaults(); renderAnalysis();
+    period = b.dataset.g; anchor = todayStr();
+    setDefaults(); paintPeriod(); renderAnalysis();
   }));
-  ['anFrom','anTo'].forEach(id=>document.getElementById(id).addEventListener('change', ()=>renderAnalysis()));
+  const step = (n)=>{
+    if(period==='custom') return;
+    const a = anchor || todayStr();
+    if(period==='dia') anchor = addDays(a, n);
+    else if(period==='semana') anchor = addDays(a, 7*n);
+    else { const d = toDate(a.slice(0,8)+'01'); d.setMonth(d.getMonth()+n); anchor = ds(d); }
+    setDefaults(); paintPeriod(); renderAnalysis();
+  };
+  document.getElementById('anPrev').addEventListener('click', ()=>step(-1));
+  document.getElementById('anNext').addEventListener('click', ()=>step(1));
+  ['anFrom','anTo'].forEach(id=>document.getElementById(id).addEventListener('change', ()=>{
+    period = 'custom';
+    const from = document.getElementById('anFrom').value, to = document.getElementById('anTo').value;
+    const days = from && to ? Math.round((toDate(to)-toDate(from))/864e5)+1 : 0;
+    group = days <= 31 ? 'dia' : days <= 120 ? 'semana' : 'mes';
+    paintPeriod(); renderAnalysis();
+  }));
 
   /* ---------- Costos según la fecha (historial de costos) ---------- */
   async function loadCostHist(){
@@ -4249,6 +4308,7 @@ initDb();
         <span class="kds-place">${escH(place)}</span>
       </div>
       ${who ? `<div class="kds-who">${who}</div>` : ''}
+      ${o.addonOf ? `<div class="kds-who" style="font-weight:800">➕ Adición del pedido #${escH(String(o.addonOf).slice(0,5))}</div>` : ''}
       ${o.editedAt && Date.now()-o.editedAt < 20*60000 ? `<div class="kds-who" style="color:var(--bad);font-weight:800">✏️ Modificado ${fmtTime(o.editedAt)}</div>` : ''}
       <ul class="kds-items">${itemsHtml(o)}</ul>
       <div class="kds-times">
@@ -4459,7 +4519,7 @@ initDb();
 let orderDiscount = null; // { promoId, name, kind:'pct'|'fixed', value, reason }
 function selectOrderDiscount(id){
   if(!id) orderDiscount = null;
-  else if(id==='libre'){ if(!can('ventas.descuento_libre')) return; orderDiscount = { promoId:'', name:'', kind:'pct', value:0, reason:'' }; }
+  else if(id==='libre'){ if(!can('ventas.descuento_libre') && !can('ventas.crear')) return; orderDiscount = { promoId:'', name:'', kind:'pct', value:0, reason:'', isNew:true }; }
   else { const p = (state.promos||[]).find(x=>x.id===id); if(!p) return; orderDiscount = { promoId:p.id, name:p.name, kind:p.kind, value:Number(p.value), reason:'' }; }
   renderOrderMainScreen();
   if(id==='libre') setTimeout(()=>{ const el = document.getElementById('odValue'); if(el) el.focus(); }, 0);
@@ -4674,6 +4734,7 @@ function orderTotalBreakHtml(sub, dsc){
   const escH = (s)=>String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const PAY = [['efectivo','Efectivo'],['transferencia','Transferencia'],['tarjeta','Tarjeta / Datáfono'],['otro','Crédito / otro']];
   let inv = null;       // factura en revisión
+  let invMode = 'compras'; // 'gastos' = todas las líneas como gasto por defecto
   let invoices = [];    // últimas facturas registradas
 
   /* ---------- Sección en Compras ---------- */
@@ -4710,7 +4771,8 @@ function orderTotalBreakHtml(sub, dsc){
   });
 
   /* ---------- 1) Foto ---------- */
-  window.openInvoiceCapture = function(){
+  window.openInvoiceCapture = function(mode){
+    invMode = mode==='gastos' ? 'gastos' : 'compras';
     inv = null;
     modalBody.innerHTML = `
       <h3>Factura por foto</h3>
@@ -4765,11 +4827,11 @@ function orderTotalBreakHtml(sub, dsc){
     const cats = categoriesFor('gastos').map(c=>c.name);
     inv.lines = (Array.isArray(d.lineas) ? d.lineas : []).map(l=>{
       const isIng = l.tipo!=='gasto' && l.insumo_id && ingIds.has(l.insumo_id);
-      return { desc: String(l.descripcion||'').slice(0,120), kind: isIng ? 'insumo' : (l.tipo==='gasto' ? 'gasto' : 'insumo'),
+      return { desc: String(l.descripcion||'').slice(0,120), kind: invMode==='gastos' ? 'gasto' : (isIng ? 'insumo' : (l.tipo==='gasto' ? 'gasto' : 'insumo')),
                ing: isIng ? l.insumo_id : '', qty: Number(l.cantidad_insumo)||'', raw: [l.cantidad, l.unidad].filter(Boolean).join(' '),
                cat: cats.includes(l.categoria_gasto) ? l.categoria_gasto : '', amount: num(l.valor_total) };
     });
-    if(!inv.lines.length) inv.lines.push({ desc:'', kind:'insumo', ing:'', qty:'', raw:'', cat:'', amount:inv.head.total||0 });
+    if(!inv.lines.length) inv.lines.push({ desc:'', kind: invMode==='gastos' ? 'gasto' : 'insumo', ing:'', qty:'', raw:'', cat:'', amount:inv.head.total||0 });
     renderReview();
   };
   function lineHtml(l, i){
@@ -4831,7 +4893,7 @@ function orderTotalBreakHtml(sub, dsc){
   window.invHead = (k, v)=>{ inv.head[k] = k==='total' ? (Number(v)||0) : v; if(k==='total') renderSum(); };
   window.invSet = (i, k, v, rerender)=>{ inv.lines[i][k] = (k==='amount') ? (Number(v)||0) : v; if(rerender){ keepHead(); renderReview(); } else if(k==='amount') renderSum(); };
   window.invDel = (i)=>{ keepHead(); inv.lines.splice(i,1); renderReview(); };
-  window.invAdd = ()=>{ keepHead(); inv.lines.push({ desc:'', kind:'insumo', ing:'', qty:'', raw:'', cat:'', amount:0 }); renderReview(); };
+  window.invAdd = ()=>{ keepHead(); inv.lines.push({ desc:'', kind: invMode==='gastos' ? 'gasto' : 'insumo', ing:'', qty:'', raw:'', cat:'', amount:0 }); renderReview(); };
   function keepHead(){ /* los campos ya se guardan al escribir */ }
 
   /* ---------- 3) Contabilizar ---------- */
@@ -5282,7 +5344,8 @@ function orderTotalBreakHtml(sub, dsc){
   const escH = (s)=>String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const SCOPES = { gastos:{ perm:'gastos.gestionar', title:'Categorías de gastos', tab:'tab-gastos', list:'pendingExpensesBox', records:()=>state.expenses||[] },
                    compras:{ perm:'compras.gestionar', title:'Categorías de compras', tab:'tab-compras', list:'purchasesList', records:()=>state.purchases||[] } };
-  const isLocked = (c)=> c.scope==='gastos' && c.name==='Domicilios';
+  // Domicilios la usa la app; si está repetida, las copias sí se pueden unir o borrar
+  const isLocked = (c)=> c.scope==='gastos' && c.name==='Domicilios' && (state.categories||[]).filter(x=>x.scope==='gastos' && x.name==='Domicilios').length<=1;
   const norm = (t)=> String(t||'').trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
 
   Object.entries(SCOPES).forEach(([scope, cfg])=>{
@@ -6124,6 +6187,316 @@ function orderTotalBreakHtml(sub, dsc){
       loadHistory(i.id).then(rows=>{ b.innerHTML = historyTable(rows, i.unit); });
     }).subscribe();
   });
+})();
+
+</script>
+<script>
+/* =====================================================================
+   Tomates — Mesa de ayuda (v13, 19 nov 2026)
+   - Borrador del pedido: si el celular recarga la app (por ir a WhatsApp), el pedido se recupera.
+   - Adición: agregar productos a un pedido ya cobrado o entregado (queda como pedido nuevo enlazado).
+   - El administrador cancela cualquier pedido (se borra; si estaba entregado vuelve el inventario).
+   - Descuento del vendedor por aprobar + revisión del administrador + "Falta cobrar".
+   - Listo / Entregado se ve al instante en este equipo.
+   - Clientes con celular, @usuario y dirección; buscador.
+   - Gastos: revisión de domicilios (el pago al domiciliario ahora es automático) y factura con foto.
+===================================================================== */
+var orderAddonOf = null; // id del pedido al que se le está haciendo una adición
+(function(){
+  const TOM = window.TOM;
+  const escH = (s)=>String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const short = (id)=> String(id||'').slice(0,5);
+  const isPaid = (o)=> (o.paymentStatus==='pagado' || o.paymentStatus==='por_confirmar') && o.paymentMethod!=='cortesia';
+  const store = { get(k){ try{ return JSON.parse(localStorage.getItem('tp_'+k)||'null'); }catch(e){ return null; } },
+                  set(k,v){ try{ localStorage.setItem('tp_'+k, JSON.stringify(v)); }catch(e){} },
+                  del(k){ try{ localStorage.removeItem('tp_'+k); }catch(e){} } };
+  window.fmtPhone = (p)=>{ const d = String(p||'').replace(/\D/g,'').slice(-10); return d.length===10 ? d.slice(0,3)+' '+d.slice(3,6)+' '+d.slice(6) : String(p||''); };
+
+  /* ---------- 1) Listo / Entregado al instante ---------- */
+  const _inner = window.setOrderStatusInner;
+  window.setOrderStatusInner = async function(id, status){
+    const o = state.orders.find(x=>x.id===id);
+    if(o && o.status!=='entregado' && o.status!==status){
+      o.status = status;
+      if(status==='listo') o.readyAt = Date.now();
+      if(status==='entregado') o.deliveredAt = Date.now();
+      try{ renderAll(); }catch(e){}
+    }
+    try{ await _inner(id, status); } finally { TOM.refetchRow && TOM.refetchRow('orders', id); }
+  };
+
+  /* ---------- 2) Borrador del pedido ---------- */
+  const orderModalOpen = ()=> modalBg.classList.contains('open') && !!document.getElementById('orderTotalPreview');
+  const DRAFT = 'orderDraft:' + ((TOM.user && TOM.user.id) || '');
+  function draftKey(){ return 'orderDraft:' + ((TOM.user && TOM.user.id) || ''); }
+  setInterval(()=>{
+    if(!orderModalOpen() || !Array.isArray(orderCart) || !orderCart.length) return;
+    store.set(draftKey(), { at: Date.now(), editingOrderId, orderAddonOf, orderCart, orderType, orderSpot, orderCust, orderDiscount,
+      orderDeliveryFee, orderDeliveryManual, orderDeliveryService,
+      custSel: (document.getElementById('orderCustomer')||{}).value || '' });
+  }, 1500);
+  const _closeModal = window.closeModal;
+  window.closeModal = function(){
+    if(orderModalOpen()){ store.del(draftKey()); orderAddonOf = null; }
+    return _closeModal.apply(this, arguments);
+  };
+  const _openOrderModal = window.openOrderModal;
+  window.openOrderModal = function(id){ orderAddonOf = null; return _openOrderModal(id); };
+  function restoreDraft(d){
+    if(d.editingOrderId){
+      const o = state.orders.find(x=>x.id===d.editingOrderId);
+      if(!o || o.status==='entregado'){ store.del(draftKey()); toast('El pedido que estabas editando ya cambió; no se recuperó el borrador.'); return; }
+      _openOrderModal(d.editingOrderId);
+    } else _openOrderModal();
+    orderCart = d.orderCart || []; orderType = d.orderType || ''; orderSpot = d.orderSpot || '';
+    orderCust = d.orderCust || orderCust; orderDiscount = d.orderDiscount || null;
+    orderDeliveryFee = d.orderDeliveryFee || 0; orderDeliveryManual = !!d.orderDeliveryManual; orderDeliveryService = d.orderDeliveryService || '';
+    orderAddonOf = d.orderAddonOf || null;
+    renderOrderMainScreen();
+    if(d.custSel){ const s = document.getElementById('orderCustomer'); if(s) s.value = d.custSel; }
+    toast('Recuperamos el pedido que estabas haciendo', 'ok');
+  }
+  const draftBanner = document.createElement('div');
+  draftBanner.className = 'banner'; draftBanner.style.display = 'none';
+  const ventas = document.getElementById('tab-pedidos');
+  if(ventas){ const h = ventas.querySelector('.section-title'); ventas.insertBefore(draftBanner, h ? h.nextSibling : ventas.firstChild); }
+  function paintDraftBanner(){
+    const d = store.get(draftKey());
+    if(!d || !d.orderCart || !d.orderCart.length || orderModalOpen()){ draftBanner.style.display = 'none'; return; }
+    const n = d.orderCart.reduce((s,l)=>s+(l.qty||0),0);
+    const where = d.orderType==='local' ? d.orderSpot : d.orderType==='domicilio' ? 'Domicilio' + (d.orderCust && d.orderCust.name ? ' · '+d.orderCust.name : '') : d.orderType==='llevar' ? 'Para llevar' : '';
+    draftBanner.style.display = '';
+    draftBanner.innerHTML = `📝 <b>Tienes un pedido sin terminar</b> (${n} producto${n===1?'':'s'}${where?' · '+escH(where):''}, ${fmtTime(d.at)}).
+      <span style="display:inline-flex;gap:6px;margin-left:6px"><button class="primary" style="width:auto;padding:6px 12px" onclick="resumeOrderDraft()">Continuar</button>
+      <button class="ghost" style="width:auto" onclick="discardOrderDraft()">Descartar</button></span>`;
+  }
+  window.resumeOrderDraft = ()=>{ const d = store.get(draftKey()); if(d) restoreDraft(d); paintDraftBanner(); };
+  window.discardOrderDraft = ()=>{ store.del(draftKey()); paintDraftBanner(); };
+  TOM.whenReady.then(()=>{
+    // Si la app se recargó hace poco con un pedido a medias, se abre solo
+    let tries = 0;
+    const t = setInterval(()=>{
+      tries++;
+      if(!state.products.length && tries < 20) return;
+      clearInterval(t);
+      const d = store.get(draftKey());
+      if(d && d.orderCart && d.orderCart.length && Date.now()-d.at < 30*60000 && !orderModalOpen()) restoreDraft(d);
+      paintDraftBanner();
+    }, 500);
+  });
+
+  /* ---------- 3) Adición a un pedido cobrado o entregado ---------- */
+  window.openAddonOrder = function(parentId){
+    const o = state.orders.find(x=>x.id===parentId); if(!o) return;
+    _openOrderModal();
+    orderAddonOf = parentId;
+    orderType = o.orderType || 'llevar'; orderSpot = o.spot || '';
+    orderDeliveryFee = 0; orderDeliveryManual = false; orderDeliveryService = '';
+    orderCust = { phone: o.orderType==='domicilio' ? phoneLast10(o.customerPhone) : '', waUser: o.customerWaUser || '', name: o.orderType==='domicilio' ? (o.customerName||'') : '',
+                  address: o.customerAddress || '', id: o.customerId || null, auto:false };
+    renderOrderMainScreen();
+    const s = document.getElementById('orderCustomer'); if(s && o.customerId) s.value = o.customerId;
+  };
+  window.addonBannerHtml = function(){
+    const p = state.orders.find(x=>x.id===orderAddonOf);
+    return `<div class="banner">➕ <b>Adición al pedido #${escH(short(orderAddonOf))}</b>${p ? ' ('+escH(p.customerName || p.spot || '')+')' : ''}. Se cobra aparte y va a cocina como pedido nuevo. Si es domicilio, la tarifa no se vuelve a cobrar.</div>`;
+  };
+  window.orderLinksHtml = function(o){
+    const out = [];
+    if(o.addonOf){ out.push(`➕ Adición del pedido #${escH(short(o.addonOf))}`); }
+    const kids = (state.orders||[]).filter(x=>x.addonOf===o.id);
+    if(kids.length) out.push(`➕ ${kids.length} adición${kids.length===1?'':'es'}: ` + kids.map(k=>'#'+escH(short(k.id))+' '+fmt(k.total)).join(', '));
+    return out.length ? `<div class="item-meta" style="color:var(--fg);font-weight:700">${out.join(' · ')}</div>` : '';
+  };
+
+  /* ---------- 4) Botones extra en la tarjeta del pedido ---------- */
+  window.orderExtraBtnsHtml = function(o){
+    let h = '';
+    if(TOM.can('ventas.crear') && o.webStatus!=='por_confirmar' && o.date===todayStr() && !canDirectEditOrder(o.id))
+      h += `<button class="ghost" onclick="openAddonOrder('${o.id}')">➕ Agregar productos</button>`;
+    if(TOM.can('ventas.editar') && o.webStatus!=='por_confirmar' && !(typeof webCancelBtnHtml==='function' && webCancelBtnHtml(o)))
+      h += `<button class="ghost" style="color:var(--bad)" onclick="openCancelOrder('${o.id}')">🚫 Cancelar</button>`;
+    return h;
+  };
+  window.openCancelOrder = function(id){
+    const o = state.orders.find(x=>x.id===id); if(!o) return;
+    const delivered = o.status==='entregado', paid = isPaid(o);
+    const kids = state.orders.filter(x=>x.addonOf===id);
+    modalBody.innerHTML = `<h3>Cancelar pedido #${escH(short(id))}</h3>
+      <div class="item-meta">${escH(o.customerName || o.spot || '')} · ${escH(orderPlaceLabel(o))} · ${fmt(o.total)}</div>
+      <div class="item-meta" style="margin-top:6px;color:var(--fg)">${(o.items||[]).map(it=>`${it.qty}× ${escH(it.name)}`).join(', ')}</div>
+      <div class="item-meta" style="margin-top:8px">El pedido se borra por completo (ventas, cocina, caja e informes) y no queda registro.</div>
+      ${delivered ? `<div class="item-meta" style="margin-top:6px;font-weight:700">↩️ Ya estaba entregado: el inventario que descontó se devuelve${o.deliveryFee ? ' y se borra el gasto automático del domicilio' : ''}.</div>` : ''}
+      ${paid ? `<div class="item-meta" style="margin-top:6px;color:var(--bad);font-weight:700">⚠️ Tiene un pago registrado (${escH(o.paymentMethodLabel||o.paymentMethod||'')} ${fmt(o.paymentAmount||o.total)}). Al cancelarlo, ese ingreso sale de la caja: devuelve el dinero al cliente.</div>` : ''}
+      ${kids.length ? `<div class="item-meta" style="margin-top:6px">Tiene ${kids.length} adición${kids.length===1?'':'es'}; esas no se cancelan solas.</div>` : ''}
+      <div id="coErr" class="item-meta" style="color:var(--bad);font-weight:700"></div>
+      <div class="modal-actions">
+        <button class="secondary" onclick="closeModal()">Volver</button>
+        ${(o.customerPhone||o.customerWaUser) ? `<button class="secondary" onclick="sendOrderWhatsApp('${o.id}','cancelado')">📲 Avisar</button>` : ''}
+        <button class="primary" style="background:var(--bad)" id="coBtn" onclick="doCancelOrder('${o.id}')">Cancelar y borrar</button>
+      </div>`;
+    modalBg.classList.add('open');
+  };
+  window.doCancelOrder = async function(id){
+    const btn = document.getElementById('coBtn'); if(btn){ btn.disabled = true; btn.textContent = 'Borrando…'; }
+    try{ await TOM.rpc('cancel_order', { p_order_id:id }); }
+    catch(e){ if(btn){ btn.disabled = false; btn.textContent = 'Cancelar y borrar'; } document.getElementById('coErr').textContent = e.message || String(e); return; }
+    TOM.reloadTable && TOM.reloadTable('expenses');
+    _closeModal(); toast('Pedido cancelado', 'ok');
+  };
+
+  /* ---------- 5) Descuento del vendedor por aprobar ---------- */
+  window.freeDiscountEditable = (d)=> !!(d && (d.isNew || d.status==='por_aprobar'));
+  window.discountExtraFields = function(d){
+    if(!d || d.promoId) return {};
+    const reason = String(d.reason||'').trim().slice(0,80);
+    if(can('ventas.descuento_libre')) return { reason };
+    const o = d.orig;
+    if(o && !d.isNew && o.status!=='por_aprobar' && o.kind===d.kind && Number(o.value)===Number(d.value)) return { reason, status: o.status||'' };
+    const mine = state.roles.find(r=>r.id===myUid);
+    return { reason, status:'por_aprobar', requestedByName: (mine && mine.name) || '' };
+  };
+  const pendingDiscounts = ()=> (state.orders||[]).filter(o=>o.discount && o.discount.status==='por_aprobar');
+  const dBanner = document.createElement('div');
+  dBanner.className = 'banner'; dBanner.style.display = 'none'; dBanner.style.cursor = 'pointer';
+  dBanner.onclick = ()=>openDiscountReview();
+  if(ventas){ const h = ventas.querySelector('.section-title'); ventas.insertBefore(dBanner, h ? h.nextSibling : ventas.firstChild); }
+  function paintDiscountBanner(){
+    const n = TOM.profile && can('ventas.descuento_libre') ? pendingDiscounts().length : 0;
+    dBanner.style.display = n ? '' : 'none';
+    dBanner.innerHTML = `🏷️ <b>${n} descuento${n===1?'':'s'} por aprobar</b> de vendedores. Toca para revisar.`;
+  }
+  window.openDiscountReview = function(onlyId){
+    const list = pendingDiscounts().filter(o=>!onlyId || o.id===onlyId);
+    modalBody.innerHTML = `<h3>Descuentos por aprobar</h3>
+      <div class="item-meta">Si rechazas un descuento, el pedido vuelve a su valor completo. Si ya estaba cobrado, queda "Falta cobrar" la diferencia.</div>
+      ${list.length ? list.map(o=>{ const d = o.discount; return `<div class="card">
+        <div class="row"><div class="item-name">#${escH(short(o.id))} · ${escH(o.customerName || o.spot || orderPlaceLabel(o))}</div><span class="item-meta">${fmtTime(o.createdAt)}</span></div>
+        <div class="item-meta" style="color:var(--fg)">${(o.items||[]).map(it=>`${it.qty}× ${escH(it.name)}`).join(', ')}</div>
+        <div class="item-meta">Descuento <b>${d.kind==='pct' ? Number(d.value)+'%' : fmt(d.value)}</b> = −${fmt(d.amount)}${o.deliveryDiscount>0?' (y domicilio gratis −'+fmt(o.deliveryDiscount)+')':''} · total ${fmt(o.total)}${isPaid(o)?' · ya cobrado':''}</div>
+        <div class="item-meta">Motivo: <b>${escH(d.reason||'—')}</b> · lo dio ${escH(d.requestedByName||'')}</div>
+        <input id="dr_${o.id}" placeholder="Nota si lo rechazas (opcional)" maxlength="120" style="margin-top:8px">
+        <div class="row" style="gap:8px;margin-top:8px">
+          <button class="primary" style="flex:1" onclick="decideDiscount('${o.id}',true)">✅ Aprobar</button>
+          <button class="secondary" style="flex:1" onclick="decideDiscount('${o.id}',false)">❌ Rechazar</button>
+        </div></div>`; }).join('') : '<div class="empty">No hay descuentos pendientes.</div>'}
+      <div class="modal-actions"><button class="secondary" onclick="closeModal()">Cerrar</button></div>`;
+    modalBg.classList.add('open');
+  };
+  window.decideDiscount = async function(id, ok){
+    const note = (document.getElementById('dr_'+id)||{}).value || '';
+    try{ await TOM.rpc('review_discount', { p_order_id:id, p_ok:ok, p_note:note }); }
+    catch(e){ toast(e.message); return; }
+    toast(ok ? 'Descuento aprobado' : 'Descuento rechazado', 'ok');
+    setTimeout(()=>{ if(pendingDiscounts().length) openDiscountReview(); else _closeModal(); }, 400);
+  };
+  // Falta cobrar (descuento rechazado después de cobrar)
+  window.openSettleBalance = function(id){
+    const o = state.orders.find(x=>x.id===id); if(!o) return;
+    modalBody.innerHTML = `<h3>Cobrar diferencia — ${fmt(o.balanceDue)}</h3>
+      <div class="item-meta">El descuento de este pedido fue rechazado después de cobrarlo. Cobra la diferencia al cliente (o la responde quien dio el descuento).</div>
+      <div class="segmented" id="sbM" style="margin-top:10px"><button type="button" data-m="efectivo" class="active">Efectivo</button><button type="button" data-m="qr">QR</button><button type="button" data-m="datafono">Datáfono</button></div>
+      <div id="sbErr" class="item-meta" style="color:var(--bad);font-weight:700"></div>
+      <div class="modal-actions"><button class="secondary" onclick="closeModal()">Cancelar</button><button class="primary" id="sbBtn" onclick="doSettleBalance('${o.id}')">Registrar cobro</button></div>`;
+    modalBody.querySelectorAll('#sbM button').forEach(b=>b.onclick=()=>modalBody.querySelectorAll('#sbM button').forEach(x=>x.classList.toggle('active', x===b)));
+    modalBg.classList.add('open');
+  };
+  window.doSettleBalance = async function(id){
+    const m = (modalBody.querySelector('#sbM button.active')||{}).dataset?.m || 'efectivo';
+    try{ await TOM.rpc('settle_balance', { p_order_id:id, p_method:m }); }
+    catch(e){ document.getElementById('sbErr').textContent = e.message; return; }
+    _closeModal(); toast('Diferencia cobrada', 'ok');
+  };
+  const _badge = window.paymentBadgeHtml;
+  window.paymentBadgeHtml = function(o){
+    const base = _badge(o);
+    const extra = [];
+    if(o.discount && o.discount.status==='por_aprobar')
+      extra.push(`<span class="pill warn">⏳ Descuento por aprobar</span>` + (can('ventas.descuento_libre') ? `<button class="secondary" style="width:auto;padding:6px 12px;font-size:12.5px" onclick="openDiscountReview('${o.id}')">Revisar</button>` : ''));
+    if(Number(o.balanceDue)>0)
+      extra.push(`<span class="pill bad">⚠️ Falta cobrar ${fmt(o.balanceDue)}</span>` + (can('ventas.cobrar') ? `<button class="secondary" style="width:auto;padding:6px 12px;font-size:12.5px" onclick="openSettleBalance('${o.id}')">Cobrar diferencia</button>` : ''));
+    if(o.discountRejected && !o.discount) extra.push(`<span class="pill" title="${escH(o.discountRejected.note||'')}">Descuento rechazado</span>`);
+    if(!extra.length) return base;
+    return `<span style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end">${extra.join('')}${base}</span>`;
+  };
+
+  /* ---------- 6) Clientes: identificar bien a cada uno ---------- */
+  window.customerLabel = function(c){
+    const bits = [c.name || 'Sin nombre'];
+    if(c.phone) bits.push('📱 ' + fmtPhone(c.phone));
+    if(c.waUser) bits.push(c.waUser);
+    if(c.address) bits.push(String(c.address).slice(0, 32));
+    return bits.join(' · ');
+  };
+  const norm = (t)=> String(t||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
+  const custMatches = (q)=>{
+    const n = norm(q).trim(), digits = String(q||'').replace(/\D/g,'');
+    if(n.length < 2 && digits.length < 3) return [];
+    return (state.customers||[]).filter(c=> norm(c.name).includes(n) || (digits.length>=3 && String(c.phone||'').includes(digits)) || norm(c.waUser).includes(n) || norm(c.address).includes(n)).slice(0, 6);
+  };
+  // Buscador en la pestaña Clientes
+  const cl = document.getElementById('customersList');
+  if(cl){
+    const inp = document.createElement('input');
+    inp.id = 'custSearch'; inp.placeholder = '🔎 Buscar por nombre, celular, @usuario o dirección'; inp.style.marginBottom = '10px';
+    cl.parentNode.insertBefore(inp, cl);
+    inp.addEventListener('input', filterCustomerCards);
+  }
+  function filterCustomerCards(){
+    const q = norm((document.getElementById('custSearch')||{}).value||'').trim(), digits = ((document.getElementById('custSearch')||{}).value||'').replace(/\D/g,'');
+    document.querySelectorAll('#customersList .card').forEach(c=>{
+      const t = norm(c.innerText), td = c.innerText.replace(/\D/g,'');
+      c.style.display = !q || t.includes(q) || (digits.length>=3 && td.includes(digits)) ? '' : 'none';
+    });
+  }
+  // Buscador dentro del pedido a domicilio
+  window.customerSearchHtml = function(){
+    return `<label style="margin-top:0" for="ordCustSearch">🔎 Buscar cliente guardado</label>
+      <input id="ordCustSearch" autocomplete="off" placeholder="Nombre, celular, @usuario o dirección" oninput="onOrderCustSearch()">
+      <div id="ordCustResults"></div>`;
+  };
+  window.onOrderCustSearch = function(){
+    const q = document.getElementById('ordCustSearch').value;
+    const res = custMatches(q);
+    document.getElementById('ordCustResults').innerHTML = res.map(c=>`<button type="button" class="ghost" style="display:block;width:100%;text-align:left;padding:8px;border-bottom:1px solid var(--border)" onclick="pickOrderCustomer('${c.id}')">
+        <b>${escH(c.name||'')}</b> <span class="item-meta">${escH([c.phone?'📱 '+fmtPhone(c.phone):'', c.waUser||'', c.address||''].filter(Boolean).join(' · '))}</span></button>`).join('')
+      || (q.trim().length>=2 ? '<div class="item-meta">Sin coincidencias: escribe sus datos abajo y quedará guardado.</div>' : '');
+  };
+  window.pickOrderCustomer = function(id){
+    const c = state.customers.find(x=>x.id===id); if(!c) return;
+    orderCust = { phone: phoneLast10(c.phone), waUser: c.waUser||'', name: c.name||'', address: c.address||'', id: c.id, auto:false };
+    renderOrderMainScreen();
+  };
+
+  /* ---------- 7) Gastos: domicilios automáticos y factura con foto ---------- */
+  const gastos = document.getElementById('tab-gastos');
+  const gBox = document.createElement('div');
+  gBox.id = 'gastosHelpBox';
+  if(gastos){ gastos.insertBefore(gBox, document.getElementById('pendingExpensesBox')); }
+  const localDate = (ms)=>{ const d = new Date(ms); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); };
+  function paintGastosHelp(){
+    if(!TOM.profile || !can('gastos.gestionar')){ gBox.innerHTML = ''; return; }
+    const days = []; for(let i=0;i<7;i++) days.push(addDaysStr(todayStr(), -i));
+    const rows = days.map(d=>{
+      const dom = (state.orders||[]).filter(o=>o.status==='entregado' && Number(o.deliveryFee)>0 && o.deliveredAt && localDate(o.deliveredAt)===d);
+      const cobrado = dom.reduce((s,o)=>s+(Number(o.deliveryFee)||0),0);
+      const exp = (state.expenses||[]).filter(e=>e.category==='Domicilios' && e.date===d);
+      const reg = exp.reduce((s,e)=>s+(Number(e.amount)||0),0);
+      return { d, n: dom.length, cobrado, reg, auto: exp.filter(e=>e.auto).length, diff: reg - cobrado };
+    }).filter(r=>r.n || r.reg);
+    gBox.innerHTML = `<button class="primary" type="button" style="width:100%;margin-bottom:10px" onclick="openInvoiceCapture('gastos')">📷 Registrar factura de gasto con foto</button>
+      <details class="card" style="margin-bottom:12px"><summary class="item-name" style="cursor:pointer">🛵 Domicilios: el pago al domiciliario ya es automático</summary>
+        <div class="item-meta" style="margin-top:6px">Desde el 19 de noviembre, al marcar <b>Entregado</b> un domicilio la app registra sola el gasto "Domicilios" (efectivo, por la tarifa completa). <b>No lo agregues a mano</b> o quedará doble. Si se cancela el pedido, el gasto se borra.</div>
+        ${rows.length ? `<div class="item-meta" style="margin-top:8px"><b>Revisión de los últimos 7 días</b> (domicilios entregados contra gastos "Domicilios"):</div>
+          ${rows.map(r=>`<div class="row" style="margin-top:4px;gap:8px"><span class="item-meta">${escH(r.d)} · ${r.n} domicilio${r.n===1?'':'s'} = ${fmt(r.cobrado)}</span>
+            <span class="item-meta" style="font-weight:700;color:${Math.abs(r.diff)<1?'var(--good)':'var(--bad)'}">gastos ${fmt(r.reg)}${Math.abs(r.diff)<1?' ✔':(r.diff>0?' · sobran '+fmt(r.diff):' · faltan '+fmt(-r.diff))}</span></div>`).join('')}
+          <div class="item-meta" style="margin-top:6px">Si un día dice "faltan", ese día no se registró el pago a domiciliarios: agrega el gasto con esa fecha. Si dice "sobran", hay un gasto repetido.</div>` : ''}
+      </details>`;
+  }
+
+  /* ---------- Refrescar todo con los datos ---------- */
+  const _renderAll = window.renderAll;
+  window.renderAll = function(){ _renderAll(); paintDraftBanner(); paintDiscountBanner(); paintGastosHelp(); filterCustomerCards(); };
 })();
 
 </script>
