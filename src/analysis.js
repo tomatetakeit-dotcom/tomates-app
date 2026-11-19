@@ -27,6 +27,12 @@
     <div class="segmented" id="anGroup">
       <button data-g="dia">Día</button><button data-g="semana" class="active">Semana</button><button data-g="mes">Mes</button>
     </div>
+    <div class="row" style="gap:8px;margin-top:8px;align-items:center">
+      <button class="ghost" id="anPrev" type="button" aria-label="Periodo anterior" style="font-size:20px;padding:6px 14px">‹</button>
+      <div id="anLabel" class="item-name" style="flex:1;text-align:center"></div>
+      <button class="ghost" id="anNext" type="button" aria-label="Periodo siguiente" style="font-size:20px;padding:6px 14px">›</button>
+    </div>
+    <div class="item-meta" style="margin-top:4px">Elige Día, Semana o Mes y muévete con ‹ ›. También puedes poner un rango a mano.</div>
     <div class="grid2">
       <div><label for="anFrom">Desde</label><input id="anFrom" type="date"></div>
       <div><label for="anTo">Hasta</label><input id="anTo" type="date"></div>
@@ -48,18 +54,57 @@
     renderAnalysis();
   });
 
+  // Periodo elegido: el día, la semana (lunes a domingo) o el mes que contiene "anchor".
+  // Dentro del periodo se agrupa por día (día y semana) o por semana (mes). 'custom' = rango a mano.
+  let period = 'semana', anchor = null;
+  const lastOfMonth = (s)=>{ const d = toDate(s); d.setMonth(d.getMonth()+1, 0); return ds(d); };
+  function periodRange(){
+    const a = anchor || todayStr();
+    if(period==='dia') return [a, a];
+    if(period==='semana'){ const m = monday(a); return [m, addDays(m,6)]; }
+    const f = a.slice(0,8)+'01'; return [f, lastOfMonth(f)];
+  }
+  function periodLabel(from, to){
+    const f = toDate(from), t = toDate(to);
+    if(period==='dia') return `${['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'][f.getDay()]} ${f.getDate()} ${MES[f.getMonth()]} ${f.getFullYear()}` + (from===todayStr()?' (hoy)':'');
+    if(period==='semana') return `Semana del ${f.getDate()} ${MES[f.getMonth()]} al ${t.getDate()} ${MES[t.getMonth()]}` + (from<=todayStr() && todayStr()<=to ? ' (esta semana)' : '');
+    if(period==='mes') return `${['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'][f.getMonth()]} ${f.getFullYear()}` + (from<=todayStr() && todayStr()<=to ? ' (este mes)' : '');
+    return `Del ${f.getDate()} ${MES[f.getMonth()]} ${f.getFullYear()} al ${t.getDate()} ${MES[t.getMonth()]} ${t.getFullYear()}`;
+  }
   function setDefaults(){
-    const to = todayStr();
-    const from = group==='dia' ? addDays(to,-13) : group==='semana' ? addDays(monday(to),-7*7) : (()=>{ const d = toDate(to); d.setMonth(d.getMonth()-5); d.setDate(1); return ds(d); })();
+    if(period==='custom') return;
+    const [from, to] = periodRange();
+    group = period==='mes' ? 'semana' : 'dia';
     document.getElementById('anFrom').value = from; document.getElementById('anTo').value = to;
   }
-  setDefaults();
+  function paintPeriod(){
+    sec.querySelectorAll('#anGroup button').forEach(x=>x.classList.toggle('active', x.dataset.g===period));
+    const from = document.getElementById('anFrom').value, to = document.getElementById('anTo').value;
+    document.getElementById('anLabel').textContent = from && to ? periodLabel(from, to) : '';
+    document.getElementById('anPrev').style.visibility = document.getElementById('anNext').style.visibility = period==='custom' ? 'hidden' : '';
+  }
+  setDefaults(); paintPeriod();
   sec.querySelectorAll('#anGroup button').forEach(b=>b.addEventListener('click', ()=>{
-    group = b.dataset.g;
-    sec.querySelectorAll('#anGroup button').forEach(x=>x.classList.toggle('active', x===b));
-    setDefaults(); renderAnalysis();
+    period = b.dataset.g; anchor = todayStr();
+    setDefaults(); paintPeriod(); renderAnalysis();
   }));
-  ['anFrom','anTo'].forEach(id=>document.getElementById(id).addEventListener('change', ()=>renderAnalysis()));
+  const step = (n)=>{
+    if(period==='custom') return;
+    const a = anchor || todayStr();
+    if(period==='dia') anchor = addDays(a, n);
+    else if(period==='semana') anchor = addDays(a, 7*n);
+    else { const d = toDate(a.slice(0,8)+'01'); d.setMonth(d.getMonth()+n); anchor = ds(d); }
+    setDefaults(); paintPeriod(); renderAnalysis();
+  };
+  document.getElementById('anPrev').addEventListener('click', ()=>step(-1));
+  document.getElementById('anNext').addEventListener('click', ()=>step(1));
+  ['anFrom','anTo'].forEach(id=>document.getElementById(id).addEventListener('change', ()=>{
+    period = 'custom';
+    const from = document.getElementById('anFrom').value, to = document.getElementById('anTo').value;
+    const days = from && to ? Math.round((toDate(to)-toDate(from))/864e5)+1 : 0;
+    group = days <= 31 ? 'dia' : days <= 120 ? 'semana' : 'mes';
+    paintPeriod(); renderAnalysis();
+  }));
 
   /* ---------- Costos según la fecha (historial de costos) ---------- */
   async function loadCostHist(){
