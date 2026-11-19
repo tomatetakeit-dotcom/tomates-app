@@ -103,7 +103,7 @@
     my_permissions(){ const p=me(); return p.role==='admin' ? ALL : (PERMS[p.role]||[]); },
     touch_last_seen(){ const p=me(); p.last_seen_at = new Date().toISOString(); return null; },
     merge_doc({p_table,p_id,p_patch}){ const r=T[p_table].find(x=>x.id===p_id); if(!r) throw {message:'No tienes permiso o el registro no existe', code:'42501'}; Object.assign(r.data,p_patch); notify(p_table,'UPDATE',r); return null; },
-    set_order_status({p_order_id,p_status}){ const r=T.orders.find(x=>x.id===p_order_id); r.data.status=p_status; if(p_status==='listo') r.data.readyAt=Date.now(); if(p_status==='entregado') r.data.deliveredAt=Date.now(); notify('orders','UPDATE',r); return r.data; },
+    set_order_status({p_order_id,p_status}){ const r=T.orders.find(x=>x.id===p_order_id); r.data.status=p_status; if(p_status==='listo') r.data.readyAt=Date.now(); if(p_status==='entregado'){ r.data.deliveredAt=Date.now(); if(r.data.deliveryFee>0 && !T.expenses.some(e=>e.id==='dom-'+r.id)){ const e={id:'dom-'+r.id,data:{category:'Domicilios',subcategory:'$'+r.data.deliveryFee,amount:r.data.deliveryFee,paymentMethod:'efectivo',date:today,auto:true,orderId:r.id},created_at:String(Date.now())}; T.expenses.push(e); notify('expenses','INSERT',e); } } notify('orders','UPDATE',r); return r.data; },
     upsert_customer({p_phone,p_wa_user,p_name,p_address}){ let d=String(p_phone||'').replace(/\D/g,''); if(d){ if(d.length===10) d='57'+d; if(!(d.length===12&&d.startsWith('57'))) throw {message:'Celular inválido: deben ser 10 dígitos'}; }
       let w=String(p_wa_user||'').replace(/\s/g,'').toLowerCase(); if(w){ if(w[0]!=='@') w='@'+w; if(!/^@[a-z0-9._]{3,30}$/.test(w)) throw {message:'Usuario de WhatsApp inválido'}; }
       const na=(t)=>String(t||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,' ').trim(); const a=na(p_address);
@@ -146,6 +146,13 @@
       Object.assign(r.data,p_patch); if(added&&r.data.status==='listo'){ r.data.status='pendiente'; r.data.kitchenStage='preparacion'; delete r.data.readyAt; }
       r.data.editLog=(r.data.editLog||[]).concat([{at:Date.now(),by:p.id,byName:p.name,before,after:p_patch.items.map(i=>i.qty+'× '+i.name).join(', '),beforeTotal:bt,afterTotal:p_patch.total}]); r.data.editedAt=Date.now(); r.data.editedByName=p.name;
       notify('orders','UPDATE',r); return r.data; },
+    cancel_order({p_order_id}){ const r=T.orders.find(x=>x.id===p_order_id); if(!r) throw {message:'El pedido ya no existe'}; const p=me(); if(p.role!=='admin' && (r.data.source!=='web'||r.data.status==='entregado')) throw {message:'Solo el administrador puede cancelar este pedido'};
+      T.expenses=T.expenses.filter(e=>e.id!=='dom-'+p_order_id); T.orders=T.orders.filter(x=>x!==r); notify('orders','DELETE',null,r); return {deleted:true}; },
+    review_discount({p_order_id,p_ok,p_note}){ const r=T.orders.find(x=>x.id===p_order_id); const d=r.data.discount; if(!d||d.status!=='por_aprobar') throw {message:'Este descuento ya fue revisado'};
+      if(p_ok){ d.status='aprobado'; } else { const sub=(r.data.items||[]).reduce((s,i)=>s+i.price*i.qty,0); const total=sub+(r.data.deliveryFee||0); r.data.discountRejected=Object.assign({},d,{status:'rechazado',note:p_note}); Object.assign(r.data,{discount:null,discountAmount:0,deliveryDiscount:0,subtotal:sub,total});
+        if(r.data.paymentMethod==='cortesia'){ ['paymentStatus','paymentMethod','paymentMethodLabel','paymentAmount','paidAt','paidDate'].forEach(k=>delete r.data[k]); } else if(['pagado','por_confirmar'].includes(r.data.paymentStatus)){ const paid=(r.data.paymentAmount||0); if(total-paid>0) r.data.balanceDue=total-paid; } }
+      notify('orders','UPDATE',r); return r.data; },
+    settle_balance({p_order_id,p_method}){ const r=T.orders.find(x=>x.id===p_order_id); const due=r.data.balanceDue||0; if(!(due>0)) throw {message:'Sin diferencia'}; delete r.data.balanceDue; r.data.extraPayments=(r.data.extraPayments||[]).concat([{amount:due,method:p_method,date:today}]); notify('orders','UPDATE',r); return r.data; },
     set_user_role({p_user,p_role}){ const p=T.profiles.find(x=>x.id===p_user); p.role=p_role; notify('profiles','UPDATE',p); return null; },
   };
 
