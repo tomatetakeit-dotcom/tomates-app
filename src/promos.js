@@ -137,7 +137,7 @@
 let orderDiscount = null; // { promoId, name, kind:'pct'|'fixed', value, reason }
 function selectOrderDiscount(id){
   if(!id) orderDiscount = null;
-  else if(id==='libre'){ if(!can('ventas.descuento_libre')) return; orderDiscount = { promoId:'', name:'', kind:'pct', value:0, reason:'' }; }
+  else if(id==='libre'){ if(!can('ventas.descuento_libre') && !can('ventas.crear')) return; orderDiscount = { promoId:'', name:'', kind:'pct', value:0, reason:'', isNew:true }; }
   else { const p = (state.promos||[]).find(x=>x.id===id); if(!p) return; orderDiscount = { promoId:p.id, name:p.name, kind:p.kind, value:Number(p.value), reason:'' }; }
   renderOrderMainScreen();
   if(id==='libre') setTimeout(()=>{ const el = document.getElementById('odValue'); if(el) el.focus(); }, 0);
