@@ -411,6 +411,46 @@ s = rep(s, """    if(can('ventas.editar')){
     } else {""")
 s = rep(s, "      ${webOrderInfoHtml(o)}\n      ${timeline}", "      ${webOrderInfoHtml(o)}\n      ${orderEditInfoHtml(o)}\n      ${timeline}")
 
+
+# v13 (mesa de ayuda): adiciones, descuento por aprobar, clientes, domicilios, caja con cobros de diferencia
+s = rep(s, """    const exists = state.categories.some(c=>c.scope==='gastos' && c.name==='Domicilios');
+    if(!exists){
+      try{
+        await db.collection('categories').add({ scope:'gastos', name:'Domicilios', subcategories: DELIVERY_FEE_OPTIONS.map(v=>fmt(v)) });""",
+"""    const exists = state.categories.some(c=>c.scope==='gastos' && c.name==='Domicilios');
+    if(!exists){
+      try{
+        // id fijo: aunque varios equipos lo intenten a la vez, queda una sola categoría
+        await db.collection('categories').doc('gastos-domicilios').set({ scope:'gastos', name:'Domicilios', subcategories: DELIVERY_FEE_OPTIONS.map(v=>fmt(v)) });""")
+s = rep(s, "    ${editingOrderId ? orderEditBannerHtml(editingOrderId) : ''}", "    ${editingOrderId ? orderEditBannerHtml(editingOrderId) : (orderAddonOf ? addonBannerHtml() : '')}")
+s = rep(s, "    if(!(deliveryFee>0)){ setOrderErr('Elige la tarifa del domicilio.'); return; }", "    if(!(deliveryFee>0) && !orderAddonOf){ setOrderErr('Elige la tarifa del domicilio.'); return; }")
+s = rep(s, "subtotal, discount, discountAmount, deliveryDiscount, ...courtesy, ...placeFields });", "subtotal, discount, discountAmount, deliveryDiscount, ...courtesy, ...placeFields, ...(orderAddonOf ? { addonOf: orderAddonOf } : {}) });")
+s = rep(s, "      ${webOrderInfoHtml(o)}\n      ${orderEditInfoHtml(o)}", "      ${webOrderInfoHtml(o)}\n      ${orderLinksHtml(o)}\n      ${orderEditInfoHtml(o)}")
+s = rep(s, "        ${webCancelBtnHtml(o)}", "        ${webCancelBtnHtml(o)}${orderExtraBtnsHtml(o)}")
+# descuento libre del vendedor (por aprobar)
+s = rep(s, "kind:o.discount.kind, value:o.discount.value, reason:'' } : null;",
+           "kind:o.discount.kind, value:o.discount.value, reason: o.discount.reason || (o.discount.promoId ? '' : String(o.discount.name||'').replace(/^Descuento libre:?\\s*/,'')), status: o.discount.status||'', orig:{ kind:o.discount.kind, value:o.discount.value, status:o.discount.status||'' } } : null;")
+s = rep(s, "(activePromos().length || can('ventas.descuento_libre') || orderDiscount)", "(activePromos().length || can('ventas.descuento_libre') || can('ventas.crear') || orderDiscount)")
+s = rep(s, """${can('ventas.descuento_libre') ? `<button type="button" class="ot-chip${orderDiscount&&!orderDiscount.promoId?' on':''}" onclick="selectOrderDiscount('libre')">✍️ Descuento libre</button>` : ''}""",
+           """${can('ventas.descuento_libre') || can('ventas.crear') ? `<button type="button" class="ot-chip${orderDiscount&&!orderDiscount.promoId?' on':''}" onclick="selectOrderDiscount('libre')">${can('ventas.descuento_libre') ? '✍️ Descuento libre' : '✍️ Descuento (por aprobar)'}</button>` : ''}""")
+s = rep(s, "    ${orderDiscount && !orderDiscount.promoId ? (can('ventas.descuento_libre') ? `", "    ${orderDiscount && !orderDiscount.promoId ? (can('ventas.descuento_libre') || freeDiscountEditable(orderDiscount) ? `")
+s = rep(s, """      </div>` : `<div class="item-meta">Descuento libre aplicado por el administrador.</div>`) : ''}` : ''}""",
+           """      </div>${can('ventas.descuento_libre') ? '' : '<div class="item-meta">⏳ Este descuento queda <b>por aprobar</b> del administrador. Escribe el motivo.</div>'}` : `<div class="item-meta">${orderDiscount.status==='por_aprobar' ? '⏳ Descuento por aprobar del administrador.' : 'Descuento libre aplicado por el administrador.'}</div>`) : ''}` : ''}""")
+s = rep(s, "kind: orderDiscount.kind, value: Number(orderDiscount.value), amount: discountAmount, by: myUid } : null;",
+           "kind: orderDiscount.kind, value: Number(orderDiscount.value), amount: discountAmount, by: myUid, ...discountExtraFields(orderDiscount) } : null;")
+s = rep(s, "  if(orderDiscount && !orderDiscount.promoId && orderDiscount.kind==='pct' && Number(orderDiscount.value)>100){ setOrderErr('El porcentaje no puede pasar de 100.', 'odValue'); return; }",
+           "  if(orderDiscount && !orderDiscount.promoId && orderDiscount.kind==='pct' && Number(orderDiscount.value)>100){ setOrderErr('El porcentaje no puede pasar de 100.', 'odValue'); return; }\n  if(orderDiscount && !orderDiscount.promoId && discountExtraFields(orderDiscount).status==='por_aprobar' && !String(orderDiscount.reason||'').trim()){ setOrderErr('Escribe el motivo del descuento: lo revisa el administrador.', 'odReason'); return; }")
+# caja: cobros de diferencia en efectivo
+s = rep(s, "  const sales = sumBy(state.orders.filter(o=>o.paymentStatus==='pagado' && o.paymentMethod==='efectivo'), cashOrderDate, o=>o.paymentAmount||o.total||0);",
+           "  const sales = sumBy(state.orders.filter(o=>o.paymentStatus==='pagado' && o.paymentMethod==='efectivo'), cashOrderDate, o=>o.paymentAmount||o.total||0);\n  state.orders.forEach(o=>(o.extraPayments||[]).forEach(p=>{ if(p.method==='efectivo' && p.date) sales[p.date] = (sales[p.date]||0) + (Number(p.amount)||0); }));")
+# clientes: que se distingan
+s = rep(s, "${state.customers.map(c=>`<option value=\"${c.id}\" ${existingOrder&&existingOrder.customerId===c.id?'selected':''}>${c.name}</option>`).join('')}",
+           "${[...state.customers].sort((a,b)=>(a.name||'').localeCompare(b.name||'')).map(c=>`<option value=\"${c.id}\" ${existingOrder&&existingOrder.customerId===c.id?'selected':''}>${esc(customerLabel(c))}</option>`).join('')}")
+s = rep(s, "      <div class=\"item-meta\">${c.phone||'Sin WhatsApp'}${st.lastDate?(' · último pedido '+st.lastDate):''}</div>",
+           "      <div class=\"item-meta\">${c.phone ? '📱 '+fmtPhone(c.phone) : 'Sin celular'}${st.lastDate?(' · último pedido '+st.lastDate):''}</div>")
+s = rep(s, "    <div class=\"ot-cust\">\n      <label style=\"margin-top:0\">Usuario de WhatsApp</label>",
+           "    <div class=\"ot-cust\">\n      ${customerSearchHtml()}\n      <label>Usuario de WhatsApp</label>")
+
 # 2) Estilos de acceso, chip de usuario y matriz de permisos
 css = (here / "auth.css").read_text(encoding="utf-8") + "\n" + (here / "brand.css").read_text(encoding="utf-8")
 head_extra = """<meta name="theme-color" content="#FF3035">
@@ -444,6 +484,7 @@ for extra_js in ("promos.js", "payments.js", "invoices.js", "whatsapp.js", "cate
     post += "<script>\n" + (here / extra_js).read_text(encoding="utf-8") + "\n</script>\n"
 post += "<script>\n" + (here / "auth.js").read_text(encoding="utf-8") + "\n</script>\n"
 post += "<script>\n" + (here / "history.js").read_text(encoding="utf-8") + "\n</script>\n"
+post += "<script>\n" + (here / "ops.js").read_text(encoding="utf-8") + "\n</script>\n"
 post += "<script>\n" + (here / "pwa.js").read_text(encoding="utf-8") + "\n</script>\n"
 s = rep(s, "</body>", post + "</body>")
 
