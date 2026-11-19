@@ -9,6 +9,7 @@
   const escH = (s)=>String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const PAY = [['efectivo','Efectivo'],['transferencia','Transferencia'],['tarjeta','Tarjeta / Datáfono'],['otro','Crédito / otro']];
   let inv = null;       // factura en revisión
+  let invMode = 'compras'; // 'gastos' = todas las líneas como gasto por defecto
   let invoices = [];    // últimas facturas registradas
 
   /* ---------- Sección en Compras ---------- */
@@ -45,7 +46,8 @@
   });
 
   /* ---------- 1) Foto ---------- */
-  window.openInvoiceCapture = function(){
+  window.openInvoiceCapture = function(mode){
+    invMode = mode==='gastos' ? 'gastos' : 'compras';
     inv = null;
     modalBody.innerHTML = `
       <h3>Factura por foto</h3>
@@ -100,11 +102,11 @@
     const cats = categoriesFor('gastos').map(c=>c.name);
     inv.lines = (Array.isArray(d.lineas) ? d.lineas : []).map(l=>{
       const isIng = l.tipo!=='gasto' && l.insumo_id && ingIds.has(l.insumo_id);
-      return { desc: String(l.descripcion||'').slice(0,120), kind: isIng ? 'insumo' : (l.tipo==='gasto' ? 'gasto' : 'insumo'),
+      return { desc: String(l.descripcion||'').slice(0,120), kind: invMode==='gastos' ? 'gasto' : (isIng ? 'insumo' : (l.tipo==='gasto' ? 'gasto' : 'insumo')),
                ing: isIng ? l.insumo_id : '', qty: Number(l.cantidad_insumo)||'', raw: [l.cantidad, l.unidad].filter(Boolean).join(' '),
                cat: cats.includes(l.categoria_gasto) ? l.categoria_gasto : '', amount: num(l.valor_total) };
     });
-    if(!inv.lines.length) inv.lines.push({ desc:'', kind:'insumo', ing:'', qty:'', raw:'', cat:'', amount:inv.head.total||0 });
+    if(!inv.lines.length) inv.lines.push({ desc:'', kind: invMode==='gastos' ? 'gasto' : 'insumo', ing:'', qty:'', raw:'', cat:'', amount:inv.head.total||0 });
     renderReview();
   };
   function lineHtml(l, i){
@@ -166,7 +168,7 @@
   window.invHead = (k, v)=>{ inv.head[k] = k==='total' ? (Number(v)||0) : v; if(k==='total') renderSum(); };
   window.invSet = (i, k, v, rerender)=>{ inv.lines[i][k] = (k==='amount') ? (Number(v)||0) : v; if(rerender){ keepHead(); renderReview(); } else if(k==='amount') renderSum(); };
   window.invDel = (i)=>{ keepHead(); inv.lines.splice(i,1); renderReview(); };
-  window.invAdd = ()=>{ keepHead(); inv.lines.push({ desc:'', kind:'insumo', ing:'', qty:'', raw:'', cat:'', amount:0 }); renderReview(); };
+  window.invAdd = ()=>{ keepHead(); inv.lines.push({ desc:'', kind: invMode==='gastos' ? 'gasto' : 'insumo', ing:'', qty:'', raw:'', cat:'', amount:0 }); renderReview(); };
   function keepHead(){ /* los campos ya se guardan al escribir */ }
 
   /* ---------- 3) Contabilizar ---------- */
