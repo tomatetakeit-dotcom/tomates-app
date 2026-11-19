@@ -33,6 +33,7 @@ App web instalable (PWA) para ventas, cocina, caja, inventario, costeo, clientes
 13. `supabase/13_cancelar_pedido_web.sql` — `cancel_web_order`: cancela (borra) un pedido web antes de entregarlo; con pago registrado solo el administrador.
 14. `supabase/14_gestionar_categorias.sql` — `manage_category`: renombrar, editar subcategorías, unir o borrar categorías de gastos/compras (actualiza los registros que usan el nombre).
 15. `supabase/15_editar_pedido.sql` — `edit_order`: el vendedor agrega o quita productos sin aprobación si el pedido no está entregado ni cobrado; valida precios, guarda historial (`editLog`) y devuelve a cocina si estaba Listo.
+16. `supabase/16_mesa_ayuda.sql` — una sola categoría Domicilios (id `gastos-domicilios`); gasto automático del domicilio al entregar (`dom-<pedido>`); `cancel_order` (administrador, cualquier pedido; devuelve inventario si estaba entregado); descuento del vendedor por aprobar (`review_discount`, `settle_balance`, `balanceDue`, `extraPayments`); facturas también desde Gastos.
 
 Funciones (Edge Functions): `invite-user` (invitar por correo, crear usuario sin correo, poner contraseña temporal) y `read-invoice` (lee facturas con IA; necesita el secreto `ANTHROPIC_API_KEY`, opcional `ANTHROPIC_MODEL`).
 
