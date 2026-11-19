@@ -9,7 +9,8 @@
   const escH = (s)=>String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const SCOPES = { gastos:{ perm:'gastos.gestionar', title:'Categorías de gastos', tab:'tab-gastos', list:'pendingExpensesBox', records:()=>state.expenses||[] },
                    compras:{ perm:'compras.gestionar', title:'Categorías de compras', tab:'tab-compras', list:'purchasesList', records:()=>state.purchases||[] } };
-  const isLocked = (c)=> c.scope==='gastos' && c.name==='Domicilios';
+  // Domicilios la usa la app; si está repetida, las copias sí se pueden unir o borrar
+  const isLocked = (c)=> c.scope==='gastos' && c.name==='Domicilios' && (state.categories||[]).filter(x=>x.scope==='gastos' && x.name==='Domicilios').length<=1;
   const norm = (t)=> String(t||'').trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
 
   Object.entries(SCOPES).forEach(([scope, cfg])=>{
