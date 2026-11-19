@@ -131,6 +131,7 @@
         <span class="kds-place">${escH(place)}</span>
       </div>
       ${who ? `<div class="kds-who">${who}</div>` : ''}
+      ${o.addonOf ? `<div class="kds-who" style="font-weight:800">➕ Adición del pedido #${escH(String(o.addonOf).slice(0,5))}</div>` : ''}
       ${o.editedAt && Date.now()-o.editedAt < 20*60000 ? `<div class="kds-who" style="color:var(--bad);font-weight:800">✏️ Modificado ${fmtTime(o.editedAt)}</div>` : ''}
       <ul class="kds-items">${itemsHtml(o)}</ul>
       <div class="kds-times">
