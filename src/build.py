@@ -425,7 +425,7 @@ s = rep(s, """    const exists = state.categories.some(c=>c.scope==='gastos' && 
 s = rep(s, "    ${editingOrderId ? orderEditBannerHtml(editingOrderId) : ''}", "    ${editingOrderId ? orderEditBannerHtml(editingOrderId) : (orderAddonOf ? addonBannerHtml() : '')}")
 s = rep(s, "    if(!(deliveryFee>0)){ setOrderErr('Elige la tarifa del domicilio.'); return; }", "    if(!(deliveryFee>0) && !orderAddonOf){ setOrderErr('Elige la tarifa del domicilio.'); return; }")
 s = rep(s, "subtotal, discount, discountAmount, deliveryDiscount, ...courtesy, ...placeFields });", "subtotal, discount, discountAmount, deliveryDiscount, ...courtesy, ...placeFields, ...(orderAddonOf ? { addonOf: orderAddonOf } : {}) });")
-s = rep(s, "      ${webOrderInfoHtml(o)}\n      ${orderEditInfoHtml(o)}", "      ${webOrderInfoHtml(o)}\n      ${orderLinksHtml(o)}\n      ${orderEditInfoHtml(o)}")
+s = rep(s, "      ${webOrderInfoHtml(o)}\n      ${orderEditInfoHtml(o)}", "      ${webOrderInfoHtml(o)}\n      ${window.orderLinksHtml ? orderLinksHtml(o) : ''}\n      ${orderEditInfoHtml(o)}")
 s = rep(s, "        ${webCancelBtnHtml(o)}", "        ${webCancelBtnHtml(o)}${orderExtraBtnsHtml(o)}")
 # descuento libre del vendedor (por aprobar)
 s = rep(s, "kind:o.discount.kind, value:o.discount.value, reason:'' } : null;",
@@ -478,6 +478,9 @@ if mock:
     s = rep(s, marker, pre)  # sin internet en las pruebas
 else:
     s = rep(s, marker, marker + "\n" + pre)
+# Respaldo: si la app pinta antes de que cargue ops.js, estas funciones devuelven vacío
+STUBS = "<script>\n['orderLinksHtml','orderExtraBtnsHtml','addonBannerHtml','customerSearchHtml'].forEach(function(k){ if(!window[k]) window[k] = function(){ return ''; }; });\nif(!window.discountExtraFields) window.discountExtraFields = function(){ return {}; };\nif(!window.customerLabel) window.customerLabel = function(c){ return (c && c.name) || ''; };\nif(!window.fmtPhone) window.fmtPhone = function(p){ return p || ''; };\n</script>\n"
+s = s.replace("<head>", "<head>\n" + STUBS, 1) if s.count("<head>")==1 else rep(s, "<body>", "<body>\n" + STUBS)
 post = "<script>\n" + (here / "analysis.js").read_text(encoding="utf-8") + "\n</script>\n"
 post += "<script>\n" + (here / "kitchen.js").read_text(encoding="utf-8") + "\n</script>\n"
 for extra_js in ("promos.js", "payments.js", "invoices.js", "whatsapp.js", "categories.js", "orderedit.js"):
