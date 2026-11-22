@@ -1,7 +1,7 @@
 /* Tomates Pizza — service worker
    Guarda solo la interfaz y la marca (caché versionada). Nunca guarda
    respuestas de Supabase (datos del negocio, sesiones ni pedidos). */
-const VERSION = 'tomates-shell-2026-11-21-1';
+const VERSION = 'tomates-shell-2026-11-22-1';
 const SHELL = [
   './',
   './index.html',
