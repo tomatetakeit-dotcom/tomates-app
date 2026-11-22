@@ -111,7 +111,10 @@
         paymentProof: { ref, path, at: now, by: myUid, byName: (mine && mine.name) || '' },
         ...(verified ? { paymentConfirmedBy: myUid, paymentConfirmedAt: now } : {}),
       });
-      closeModal();
+      const lo = state.orders.find(x=>x.id===orderId);
+      if(lo){ lo.paymentStatus = verified ? 'pagado' : 'por_confirmar'; lo.paymentMethod = 'qr'; lo.paymentMethodLabel = 'QR'; lo.paymentAmount = o.total; lo.paidAt = now; }
+      closeModal(); try{ renderAll(); }catch(_){}
+      TOM.refetchRow('orders', orderId);
       toast(verified ? 'Pago confirmado' : 'Comprobante guardado. Queda por confirmar.', 'ok');
     }catch(e){ btn.disabled = false; btn.textContent = 'Guardar'; err(e.message || String(e)); }
   };
@@ -152,9 +155,16 @@
   };
   window.decideQr = async function(id, ok){
     const note = (document.getElementById('rj_'+id)||{}).value || '';
-    try{ await TOM.rpc('confirm_qr_payment', { p_order_id:id, p_ok:ok, p_note:note }); toast(ok ? 'Pago confirmado' : 'Pago rechazado', 'ok'); }
-    catch(e){ toast(e.message); return; }
-    setTimeout(()=>openQrReview(), 300);
+    modalBody.querySelectorAll('button').forEach(b=>{ if(/decideQr\('/.test(b.getAttribute('onclick')||'') && (b.getAttribute('onclick')||'').includes(id)) b.disabled = true; });
+    try{ await TOM.rpc('confirm_qr_payment', { p_order_id:id, p_ok:ok, p_note:note }); }
+    catch(e){ toast(e.message); modalBody.querySelectorAll('button').forEach(b=>b.disabled=false); return; }
+    // Se ve al instante en este equipo (sin esperar a la conexión en vivo)
+    const o = state.orders.find(x=>x.id===id);
+    if(o){ if(ok){ o.paymentStatus = 'pagado'; o.paymentConfirmedAt = Date.now(); } else { o.paymentStatus = 'rechazado'; o.paymentRejectedNote = note; } }
+    try{ renderAll(); }catch(_){}
+    toast(ok ? 'Pago confirmado' : 'Pago rechazado', 'ok');
+    await TOM.refetchRow('orders', id);
+    if(pendingQr().length) openQrReview(); else closeModal();
   };
 
   // Aviso en Ventas para quien confirma pagos
