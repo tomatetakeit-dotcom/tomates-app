@@ -172,6 +172,10 @@
       channel(){ const ch = { on(_t, f, cb){ listeners.push({ table:f.table, cb }); return ch; }, subscribe(cb){ setTimeout(()=>cb&&cb('SUBSCRIBED'),0); return ch; } }; return ch; },
       removeChannel(){},
       functions: { async invoke(name, {body}){ calls.push({ fn:name, body:{ ...clone(body), image: body.image ? '[b64 '+body.image.length+']' : undefined } });
+        if(name==='read-payment'){
+          if(window.__MOCK_NO_AI__) return { data:null, error:{ context:{ json: async()=>({ error:'La lectura con IA no está activa: falta la llave (ANTHROPIC_API_KEY) en Supabase.', code:'no_key' }) } } };
+          const a = Object.assign({ es_comprobante:true, exitosa:true, banco_app:'Bancolombia', valor: body.expected, fecha: body.today, hora:'23:59', referencia:'M8812345', destinatario_nombre:'Tomates Pizza SAS', destinatario_cuenta:'4321', remitente_nombre:'Ana', legible:true, observaciones:'' }, window.__MOCK_PAY__||{});
+          return { data:{ ok:true, data:a }, error:null }; }
         if(name==='read-invoice'){
           if(window.__MOCK_NO_AI__) return { data:null, error:{ context:{ json: async()=>({ error:'Falta configurar la llave de IA (ANTHROPIC_API_KEY) en Supabase.', code:'no_key' }) } } };
           return { data:{ ok:true, data:{ proveedor:'Distribuidora La Vaca', nit:'900123', numero:'FV-881', fecha:'2026-11-10', metodo_pago:'transferencia', subtotal:84000, iva:16000, total:100000, legible:true,
