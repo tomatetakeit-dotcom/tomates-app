@@ -301,7 +301,94 @@ var orderAddonOf = null; // id del pedido al que se le está haciendo una adici�
       </details>`;
   }
 
+  /* ---------- 8) Pedidos sin cobrar: alerta para mostrador y administrador ---------- */
+  // Sin cobrar = vale más de $0, no está pagado ni con QR por confirmar (o le falta una diferencia).
+  const UNPAID_MIN = 15; // minutos después de entregado para empezar a recordar con sonido
+  window.isUnpaidOrder = (o)=> !!o && o.webStatus!=='por_confirmar' && Number(o.total)>0 &&
+    ((o.paymentStatus!=='pagado' && o.paymentStatus!=='por_confirmar' && o.paymentMethod!=='cortesia') || Number(o.balanceDue)>0);
+  const unpaidList = ()=> (state.orders||[]).filter(isUnpaidOrder);
+  const dueOf = (o)=> Number(o.balanceDue)>0 ? Number(o.balanceDue) : Number(o.total)||0;
+  const uBanner = document.createElement('div');
+  uBanner.className = 'banner'; uBanner.style.display = 'none'; uBanner.style.cursor = 'pointer';
+  uBanner.style.borderLeftColor = 'var(--bad)';
+  uBanner.onclick = ()=>openUnpaidList();
+  if(ventas){ const h = ventas.querySelector('.section-title'); ventas.insertBefore(uBanner, h ? h.nextSibling : ventas.firstChild); }
+  const cajaSec = document.getElementById('tab-caja');
+  const uCaja = document.createElement('div');
+  uCaja.className = 'banner'; uCaja.style.display = 'none'; uCaja.style.cursor = 'pointer'; uCaja.style.borderLeftColor = 'var(--bad)';
+  uCaja.onclick = ()=>openUnpaidList();
+  if(cajaSec){ cajaSec.insertBefore(uCaja, document.getElementById('cajaBody')); }
+  function unpaidGroups(){
+    const today = todayStr(), list = unpaidList();
+    const old = list.filter(o=>o.date && o.date < today);
+    const delivered = list.filter(o=>o.date===today && o.status==='entregado');
+    const open = list.filter(o=>o.date===today && o.status!=='entregado');
+    return { list, old, delivered, open, sum: (a)=>a.reduce((s,o)=>s+dueOf(o),0) };
+  }
+  function paintUnpaid(){
+    const show = TOM.profile && (can('ventas.cobrar') || can('caja.cuadrar'));
+    if(!show){ uBanner.style.display = uCaja.style.display = 'none'; return; }
+    const g = unpaidGroups();
+    const urgent = g.old.length + g.delivered.length;
+    if(!g.list.length){ uBanner.style.display = uCaja.style.display = 'none'; return; }
+    const parts = [];
+    if(g.delivered.length) parts.push(`<b>${g.delivered.length} entregado${g.delivered.length===1?'':'s'} sin cobrar</b> (${fmt(g.sum(g.delivered))})`);
+    if(g.old.length) parts.push(`<b>${g.old.length} de días anteriores</b> sin cobrar (${fmt(g.sum(g.old))})`);
+    if(g.open.length) parts.push(`${g.open.length} en curso por cobrar (${fmt(g.sum(g.open))})`);
+    const html = `${urgent ? '⚠️' : '💰'} ${parts.join(' · ')}. Toca para ver y cobrar.`;
+    uBanner.style.display = ''; uBanner.innerHTML = html;
+    uBanner.style.background = urgent ? '' : '';
+    uBanner.style.fontWeight = urgent ? '600' : '';
+    uCaja.style.display = urgent || g.open.length ? '' : 'none';
+    uCaja.innerHTML = `⚠️ <b>Antes de cerrar la caja:</b> hay ${g.list.length} pedido${g.list.length===1?'':'s'} sin cobrar por ${fmt(g.sum(g.list))}. Si no se cobran, la caja no cuadra. Toca para revisarlos.`;
+  }
+  window.openUnpaidList = function(){
+    const g = unpaidGroups();
+    const row = (o)=>`<div class="card">
+        <div class="row"><div class="item-name" style="font-size:14.5px">${escH(o.customerName || o.spot || orderPlaceLabel(o) || ('Pedido #'+short(o.id)))}</div>
+          <span class="item-name" style="font-size:14.5px">${fmt(dueOf(o))}</span></div>
+        <div class="item-meta">#${escH(short(o.id))} · ${escH(o.date||'')} ${o.createdAt?fmtTime(o.createdAt):''} · ${o.status==='entregado' ? '🛵 Entregado'+(o.deliveredAt?' '+fmtTime(o.deliveredAt):'') : o.status==='listo' ? '✅ Listo' : '🍳 En cocina'}${Number(o.balanceDue)>0?' · falta una diferencia':''}</div>
+        <div class="item-meta" style="color:var(--fg)">${(o.items||[]).map(it=>`${it.qty}× ${escH(it.name)}`).join(', ')}</div>
+        <div class="row" style="gap:8px;margin-top:8px">
+          ${can('ventas.cobrar') ? (Number(o.balanceDue)>0 ? `<button class="primary" style="flex:1" onclick="openSettleBalance('${o.id}')">💰 Cobrar diferencia</button>` : `<button class="primary" style="flex:1" onclick="openCobroModal('${o.id}')">💰 Cobrar</button>`) : ''}
+          ${can('ventas.editar') ? `<button class="ghost" style="color:var(--bad)" onclick="openCancelOrder('${o.id}')">🚫 Cancelar</button>` : ''}
+        </div></div>`;
+    const sec = (t, a)=> a.length ? `<h3 style="margin-top:14px">${t} · ${fmt(g.sum(a))}</h3>${a.sort((x,y)=>(x.createdAt||0)-(y.createdAt||0)).map(row).join('')}` : '';
+    modalBody.innerHTML = `<h3>Pedidos sin cobrar</h3>
+      <div class="item-meta">Cada pedido sin cobrar descuadra la caja. Cóbralo, o si no se vendió, que el administrador lo cancele.</div>
+      ${sec('⚠️ De días anteriores', g.old)}${sec('🛵 Entregados hoy sin cobrar', g.delivered)}${sec('🍳 En curso (aún sin cobrar)', g.open)}
+      ${g.list.length ? '' : '<div class="empty">Todo está cobrado 🙌</div>'}
+      <div class="modal-actions"><button class="secondary" onclick="closeModal()">Cerrar</button></div>`;
+    modalBg.classList.add('open');
+  };
+  // Recordatorio con sonido y aviso cada 15 min si hay pedidos entregados hace rato sin cobrar
+  let actxU = null, lastUnpaidAlert = 0;
+  const unlockU = ()=>{ try{ actxU = actxU || new (window.AudioContext||window.webkitAudioContext)(); if(actxU.state==='suspended') actxU.resume(); }catch(_){} };
+  ['pointerdown','keydown','touchstart'].forEach(ev=>document.addEventListener(ev, unlockU, { passive:true }));
+  function remindBeep(){
+    try{ const ac = actxU; if(!ac || ac.state!=='running') return;
+      [[0,660],[.25,523],[.5,660],[.75,523]].forEach(([t,f])=>{ const o = ac.createOscillator(), g = ac.createGain(), t0 = ac.currentTime+t;
+        o.type='square'; o.frequency.value=f; g.gain.setValueAtTime(0.0001,t0); g.gain.exponentialRampToValueAtTime(0.35,t0+.02); g.gain.exponentialRampToValueAtTime(0.0001,t0+.2);
+        o.connect(g); g.connect(ac.destination); o.start(t0); o.stop(t0+.22); }); }catch(_){}
+  }
+  setInterval(()=>{
+    if(!TOM.profile || !can('ventas.cobrar') || document.visibilityState!=='visible') return;
+    const late = unpaidList().filter(o=>o.status==='entregado' && (o.date < todayStr() || (o.deliveredAt && Date.now()-o.deliveredAt > UNPAID_MIN*60000)));
+    if(!late.length || Date.now()-lastUnpaidAlert < UNPAID_MIN*60000) return;
+    lastUnpaidAlert = Date.now();
+    remindBeep(); try{ navigator.vibrate && navigator.vibrate([200,100,200]); }catch(_){}
+    toast(`⚠️ ${late.length} pedido${late.length===1?'':'s'} entregado${late.length===1?'':'s'} sin cobrar (${fmt(late.reduce((s,o)=>s+dueOf(o),0))}). Revisa en Ventas.`);
+  }, 60000);
+  // En la tarjeta del pedido
+  const _badge2 = window.paymentBadgeHtml;
+  window.paymentBadgeHtml = function(o){
+    const b = _badge2(o);
+    if(isUnpaidOrder(o) && (o.status==='entregado' || (o.date && o.date < todayStr())) && !(Number(o.balanceDue)>0))
+      return `<span style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end"><span class="pill bad">⚠️ ${o.status==='entregado'?'Entregado':'Pendiente'} sin cobrar</span>${b}</span>`;
+    return b;
+  };
+
   /* ---------- Refrescar todo con los datos ---------- */
   const _renderAll = window.renderAll;
-  window.renderAll = function(){ _renderAll(); paintDraftBanner(); paintDiscountBanner(); paintGastosHelp(); filterCustomerCards(); };
+  window.renderAll = function(){ _renderAll(); paintDraftBanner(); paintDiscountBanner(); paintGastosHelp(); filterCustomerCards(); paintUnpaid(); };
 })();
