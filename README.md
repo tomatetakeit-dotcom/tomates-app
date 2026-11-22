@@ -35,7 +35,7 @@ App web instalable (PWA) para ventas, cocina, caja, inventario, costeo, clientes
 15. `supabase/15_editar_pedido.sql` — `edit_order`: el vendedor agrega o quita productos sin aprobación si el pedido no está entregado ni cobrado; valida precios, guarda historial (`editLog`) y devuelve a cocina si estaba Listo.
 16. `supabase/16_mesa_ayuda.sql` — una sola categoría Domicilios (id `gastos-domicilios`); gasto automático del domicilio al entregar (`dom-<pedido>`); `cancel_order` (administrador, cualquier pedido; devuelve inventario si estaba entregado); descuento del vendedor por aprobar (`review_discount`, `settle_balance`, `balanceDue`, `extraPayments`); facturas también desde Gastos.
 
-Funciones (Edge Functions): `invite-user` (invitar por correo, crear usuario sin correo, poner contraseña temporal) y `read-invoice` (lee facturas con IA; necesita el secreto `ANTHROPIC_API_KEY`, opcional `ANTHROPIC_MODEL`).
+Funciones (Edge Functions): `invite-user` (invitar por correo, crear usuario sin correo, poner contraseña temporal), `read-invoice` (lee facturas con IA) y `read-payment` (lee comprobantes de pago QR con IA: valor, fecha, hora, referencia y cuenta destino; la app los compara con el pedido y con las cuentas de Tomates guardadas en Configuración → documento `pagos`, solo últimos 4 dígitos). Ambas necesitan el secreto `ANTHROPIC_API_KEY` (opcional `ANTHROPIC_MODEL`). Al crearlas en el panel, dejar "Verify JWT" apagado como las demás; la función revisa la sesión y el permiso por dentro.
 
 Edge Function: `supabase/functions/invite-user/index.ts` (verificación JWT legacy desactivada; la función valida la sesión y el permiso `usuarios.gestionar`).
 
