@@ -2481,6 +2481,20 @@ function buildCashLedger(){
   const purs = sumBy(state.purchases.filter(p=>p.paymentMethod==='efectivo'), p=>p.date, p=>p.totalCost||0);
   const outs = sumBy(state.cashMovements.filter(m=>m.type==='entrega'||m.type==='consignacion'), m=>m.date, m=>m.amount||0);
   const ins = sumBy(state.cashMovements.filter(m=>m.type==='reintegro'), m=>m.date, m=>m.amount||0);
+  // Ingresos y pagos por QR/transferencia y datáfono (tarjeta), por día
+  const paidBy = m => sumBy(state.orders.filter(o=>o.paymentStatus==='pagado' && o.paymentMethod===m), cashOrderDate, o=>o.paymentAmount||o.total||0);
+  const qrIns = paidBy('qr'), datIns = paidBy('datafono');
+  state.orders.forEach(o=>(o.extraPayments||[]).forEach(p=>{
+    if(p.date && (p.method==='qr' || p.method==='datafono')){
+      const mp = p.method==='qr' ? qrIns : datIns;
+      mp[p.date] = (mp[p.date]||0) + (Number(p.amount)||0);
+    }
+  }));
+  const addMaps = (...ms) => { const r = {}; ms.forEach(m=>Object.keys(m).forEach(k=>{ r[k] = (r[k]||0) + m[k]; })); return r; };
+  const qrOuts = addMaps(sumBy(state.expenses.filter(e=>e.paymentMethod==='qr'), e=>e.date, e=>e.amount||0), sumBy(state.purchases.filter(p=>p.paymentMethod==='qr'), p=>p.date, p=>p.totalCost||0));
+  const datOuts = addMaps(sumBy(state.expenses.filter(e=>e.paymentMethod==='datafono'), e=>e.date, e=>e.amount||0), sumBy(state.purchases.filter(p=>p.paymentMethod==='datafono'), p=>p.date, p=>p.totalCost||0));
+  const cons = sumBy(state.cashMovements.filter(m=>m.type==='consignacion'), m=>m.date, m=>m.amount||0);
+  let bankPrev = startDoc.bankOpening||0;
   const closed = {};
   sorted.forEach(c=>{ if(c.status==='cerrada') closed[c.date] = c; });
   const days = {};
@@ -2490,6 +2504,11 @@ function buildCashLedger(){
     const opening = d===start ? (startDoc.openingAmount||0) : prevClosing;
     const info = { date:d, opening, sales:sales[d]||0, exps:exps[d]||0, purs:purs[d]||0, out:outs[d]||0, inn:ins[d]||0 };
     info.expected = opening + info.sales - info.exps - info.purs - info.out + info.inn;
+    info.qrIn = qrIns[d]||0; info.datIn = datIns[d]||0;
+    info.qrOut = qrOuts[d]||0; info.datOut = datOuts[d]||0; info.cons = cons[d]||0;
+    info.bankOpen = bankPrev;
+    info.bankBal = bankPrev + info.qrIn + info.datIn + info.cons - info.qrOut - info.datOut;
+    bankPrev = info.bankBal;
     const cd = closed[d];
     info.closed = !!cd;
     info.counted = cd ? (cd.closingCountedAmount||0) : null;
@@ -2531,6 +2550,8 @@ function renderCashRegister(){
       <div class="item-meta">Desde el día siguiente no tendrás que abrirla: el efectivo con el que cierres será el saldo inicial del día.</div>
       <label>Efectivo inicial en caja menor</label>
       <input id="cajaOpeningAmount" type="number" placeholder="100000">
+      <label>Saldo inicial de la cuenta bancaria (QR y datáfono)</label>
+      <input id="cajaBankOpening" type="number" placeholder="0">
       <button class="primary" style="margin-top:10px" onclick="openCashRegister()">Abrir caja</button>
     </div>`;
   } else if(t){
@@ -2543,6 +2564,9 @@ function renderCashRegister(){
         ${row('Saldo inicial', fmt(t.opening))}
         <div class="item-meta" style="font-size:11px;margin:-2px 0 4px">${srcTxt}</div>
         ${row('+ Ventas en efectivo', fmt(t.sales))}
+        ${row('+ Recibido por QR / transferencia', fmt(t.qrIn))}
+        ${row('+ Recibido por datáfono (tarjeta)', fmt(t.datIn))}
+        ${row('= Total recibido hoy', fmt(t.sales+t.qrIn+t.datIn))}
         ${row('− Gastos en efectivo', fmt(t.exps))}
         ${row('− Compras en efectivo', fmt(t.purs))}
         ${row('− Entregado a caja mayor', fmt(t.out))}
@@ -2561,6 +2585,23 @@ function renderCashRegister(){
     </div>`;
   } else {
     html += '<div class="empty">La fecha de apertura de la caja es posterior a hoy. Revisa la fecha de tu dispositivo.</div>';
+  }
+
+  if(L && t){
+    html += `<div class="card">
+      <div class="row"><div class="item-name">🏧 Cuenta bancaria (QR y datáfono)</div>${isAdmin ? '<button class="ghost" style="padding:0" onclick="openBankOpeningModal()">✏️ Saldo inicial</button>' : ''}</div>
+      <div class="item-name" style="font-size:22px;margin:6px 0 8px">${fmt(t.bankBal)}</div>
+      <div class="item-meta" style="margin-bottom:6px">Saldo de la cuenta hoy (estimado)</div>
+      <div class="subtle-list">
+        ${row('Saldo al iniciar hoy', fmt(t.bankOpen))}
+        ${row('+ QR / transferencias de hoy', fmt(t.qrIn))}
+        ${row('+ Datáfono de hoy', fmt(t.datIn))}
+        ${row('+ Consignaciones de hoy', fmt(t.cons))}
+        ${row('− Pagos por transferencia / QR de hoy', fmt(t.qrOut))}
+        ${row('− Pagos con tarjeta de hoy', fmt(t.datOut))}
+      </div>
+      <div class="item-meta" style="margin-top:8px">Calculado desde ${L.start}. Gastos y compras pagados por QR o datáfono restan de la cuenta.${L.startDoc.bankOpening ? '' : ' Falta el saldo inicial: toca ✏️ Saldo inicial (admin) y escribe el saldo real de la cuenta.'}</div>
+    </div>`;
   }
 
   if(isAdmin){
@@ -2596,7 +2637,7 @@ function renderCashRegister(){
         <div class="item-name">${c.date}</div>
         ${diffPill(c.difference||0)}
       </div>
-      <div class="item-meta">Inicio ${fmt(c.openingAmount)} · Esperado ${fmt(c.expectedAmount)} · Contado ${fmt(c.closingCountedAmount)}${di && di.out>0 ? ' · A caja mayor '+fmt(di.out) : ''}</div>
+      <div class="item-meta">Inicio ${fmt(c.openingAmount)} · Esperado ${fmt(c.expectedAmount)} · Contado ${fmt(c.closingCountedAmount)}${di ? ' · QR '+fmt(di.qrIn)+' · Datáfono '+fmt(di.datIn) : ''}${di && di.out>0 ? ' · A caja mayor '+fmt(di.out) : ''}</div>
     </div>`;
   }).join('') : '<div class="empty">Aún no hay cuadres de caja cerrados.</div>';
 
@@ -2610,13 +2651,43 @@ async function openCashRegister(){
   const today = todayStr();
   await db.collection('cashRegister').doc(today).set({
     date: today, openingAmount: amount, status:'abierta', openedAt: Date.now(), openedBy: myUid||null,
+    bankOpening: Number(document.getElementById('cajaBankOpening')?.value)||0,
   });
+}
+
+// Saldo inicial de la cuenta bancaria (QR y datáfono), editable por el administrador
+function openBankOpeningModal(){
+  const L = buildCashLedger();
+  if(!L) return;
+  modalBody.innerHTML = `
+    <h3>Saldo inicial de la cuenta</h3>
+    <div class="item-meta">Saldo de la cuenta bancaria al iniciar la caja (desde ${L.start}). Se le suman QR, datáfono y consignaciones, y se le restan los pagos hechos por transferencia o tarjeta.</div>
+    <label>Saldo inicial de la cuenta</label>
+    <input id="bankOpeningAmount" type="number" value="${L.startDoc.bankOpening||0}">
+    <div class="modal-actions">
+      <button class="secondary" onclick="closeModal()">Cancelar</button>
+      <button class="primary" onclick="saveBankOpening()">Guardar</button>
+    </div>`;
+  modalBg.classList.add('open');
+}
+async function saveBankOpening(){
+  if(!db) return;
+  const L = buildCashLedger();
+  if(!L) return;
+  const v = Number(document.getElementById('bankOpeningAmount').value)||0;
+  const { id, ...rest } = L.startDoc;
+  await db.collection('cashRegister').doc(id || L.start).set({ ...rest, bankOpening: v });
+  closeModal();
 }
 
 function openCloseCashModal(expected){
   modalBody.innerHTML = `
     <h3>Cerrar caja</h3>
     <div class="item-meta">Efectivo esperado: ${fmt(expected)}</div>
+    ${(()=>{ const L = buildCashLedger(); const t = L && L.days[todayStr()]; return t ? `<div class="subtle-list" style="margin-top:8px">
+      <div class="row"><span class="item-meta">Recibido hoy por QR / transferencia</span><span class="item-name" style="font-size:13px">${fmt(t.qrIn)}</span></div>
+      <div class="row"><span class="item-meta">Recibido hoy por datáfono (tarjeta)</span><span class="item-name" style="font-size:13px">${fmt(t.datIn)}</span></div>
+    </div>` : ''; })()}
     <label>Efectivo contado físicamente</label>
     <input id="cajaCountedAmount" type="number" value="${Math.round(expected)}">
     <div class="item-meta" style="margin-top:6px">Lo que cuentes aquí será el saldo inicial de la caja de mañana.</div>
