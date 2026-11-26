@@ -5,7 +5,7 @@
 ['orderLinksHtml','orderExtraBtnsHtml','addonBannerHtml','customerSearchHtml'].forEach(function(k){ if(!window[k]) window[k] = function(){ return ''; }; });
 if(!window.discountExtraFields) window.discountExtraFields = function(){ return {}; };
 if(!window.customerLabel) window.customerLabel = function(c){ return (c && c.name) || ''; };
-if(!window.fmtPhone) window.fmtPhone = function(p){ return p || ''; };
+if(!window.fmtPhone) window.fmhtPhone = function(p){ return p || ''; };
 </script>
 
 <meta charset="UTF-8">
@@ -2491,8 +2491,8 @@ function buildCashLedger(){
     }
   }));
   const addMaps = (...ms) => { const r = {}; ms.forEach(m=>Object.keys(m).forEach(k=>{ r[k] = (r[k]||0) + m[k]; })); return r; };
-  const qrOuts = addMaps(sumBy(state.expenses.filter(e=>e.paymentMethod==='qr'), e=>e.date, e=>e.amount||0), sumBy(state.purchases.filter(p=>p.paymentMethod==='qr'), p=>p.date, p=>p.totalCost||0));
-  const datOuts = addMaps(sumBy(state.expenses.filter(e=>e.paymentMethod==='datafono'), e=>e.date, e=>e.amount||0), sumBy(state.purchases.filter(p=>p.paymentMethod==='datafono'), p=>p.date, p=>p.totalCost||0));
+  const QR_OUT_METHODS = ['qr','transferencia']; const qrOuts = addMaps(sumBy(state.expenses.filter(e=>QR_OUT_METHODS.includes(e.paymentMethod)), e=>e.date, e=>e.amount||0), sumBy(state.purchases.filter(p=>QR_OUT_METHODS.includes(p.paymentMethod)), p=>p.date, p=>p.totalCost||0));
+  const DAT_OUT_METHODS = ['datafono','tarjeta']; const datOuts = addMaps(sumBy(state.expenses.filter(e=>DAT_OUT_METHODS.includes(e.paymentMethod)), e=>e.date, e=>e.amount||0), sumBy(state.purchases.filter(p=>DAT_OUT_METHODS.includes(p.paymentMethod)), p=>p.date, p=>p.totalCost||0));
   const cons = sumBy(state.cashMovements.filter(m=>m.type==='consignacion'), m=>m.date, m=>m.amount||0);
   let bankPrev = startDoc.bankOpening||0;
   const closed = {};
