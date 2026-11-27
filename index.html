@@ -6394,10 +6394,35 @@ function orderTotalBreakHtml(sub, dsc){
     });
   };
 
+  /* ---------- Informes: ingresos por medio de pago (cada pata de un pago mixto cuenta en su medio) ---------- */
+  const PAY_BUCKET = { efectivo:'efectivo', qr:'qr', transferencia:'qr', datafono:'datafono', tarjeta:'datafono' };
+  const PAY_BUCKET_LABEL = { efectivo:'Efectivo', qr:'QR / transferencia', datafono:'Tarjeta (datáfono, con recargo)' };
+  const addPaymentsByMethodBox = (from, to) => {
+    const body = document.getElementById('reportsBody'); if(!body) return;
+    const old = document.getElementById('payMethodBox'); if(old) old.remove();
+    const tot = { efectivo:0, qr:0, datafono:0 };
+    const add = (m, v, d) => { if(!d || !(d>=from && d<=to)) return; const k = PAY_BUCKET[m]; if(k) tot[k] += Number(v)||0; };
+    (state.orders||[]).forEach(o=>{
+      if(o.paymentStatus!=='pagado' || o.paymentMethod==='cortesia') return;
+      add(o.paymentMethod, o.paymentAmount||o.total||0, cashOrderDate(o));
+      (o.extraPayments||[]).forEach(p=> add(p.method, p.amount, p.date));
+    });
+    const all = tot.efectivo + tot.qr + tot.datafono;
+    const box = document.createElement('div'); box.className = 'card'; box.id = 'payMethodBox';
+    box.innerHTML = `<div class="item-name" style="font-size:16px">💳 Ingresos por medio de pago</div>
+      <div class="item-meta">Cada parte de un pago mixto cuenta en su propio medio. Incluye el recargo del 5% en tarjeta.</div>
+      <div style="margin-top:8px">${Object.keys(PAY_BUCKET_LABEL).map(k=>`<div class="row"><span class="item-meta">${PAY_BUCKET_LABEL[k]}</span><span class="item-name" style="font-size:13px">${fmt(tot[k])}</span></div>`).join('')}
+        <div class="row" style="font-weight:700"><span class="item-meta">Total cobrado</span><span class="item-name" style="font-size:13px">${fmt(all)}</span></div></div>`;
+    body.appendChild(box);
+  };
+
   /* ---------- Informes: variación de costos en el rango ---------- */
   const _renderReports = window.renderReports;
   window.renderReports = function(){
     const r = _renderReports.apply(this, arguments);
+    const body0 = document.getElementById('reportsBody');
+    const from0 = document.getElementById('repFrom').value, to0 = document.getElementById('repTo').value;
+    if(body0 && from0 && to0 && TOM.can('informes.ver')) addPaymentsByMethodBox(from0, to0);
     if(!canSeeCosts() || !TOM.can('informes.ver')) return r;
     const body = document.getElementById('reportsBody'); if(!body) return r;
     const from = document.getElementById('repFrom').value, to = document.getElementById('repTo').value;
