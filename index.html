@@ -2491,8 +2491,10 @@ function buildCashLedger(){
     }
   }));
   const addMaps = (...ms) => { const r = {}; ms.forEach(m=>Object.keys(m).forEach(k=>{ r[k] = (r[k]||0) + m[k]; })); return r; };
-  const QR_OUT_METHODS = ['qr','transferencia']; const qrOuts = addMaps(sumBy(state.expenses.filter(e=>QR_OUT_METHODS.includes(e.paymentMethod)), e=>e.date, e=>e.amount||0), sumBy(state.purchases.filter(p=>QR_OUT_METHODS.includes(p.paymentMethod)), p=>p.date, p=>p.totalCost||0));
-  const DAT_OUT_METHODS = ['datafono','tarjeta']; const datOuts = addMaps(sumBy(state.expenses.filter(e=>DAT_OUT_METHODS.includes(e.paymentMethod)), e=>e.date, e=>e.amount||0), sumBy(state.purchases.filter(p=>DAT_OUT_METHODS.includes(p.paymentMethod)), p=>p.date, p=>p.totalCost||0));
+  // Los formularios de gastos y compras guardan "transferencia" y "tarjeta" (además de los códigos antiguos qr/datafono)
+  const QR_OUT_METHODS = ['qr','transferencia'], DAT_OUT_METHODS = ['datafono','tarjeta'];
+  const qrOuts = addMaps(sumBy(state.expenses.filter(e=>QR_OUT_METHODS.includes(e.paymentMethod)), e=>e.date, e=>e.amount||0), sumBy(state.purchases.filter(p=>QR_OUT_METHODS.includes(p.paymentMethod)), p=>p.date, p=>p.totalCost||0));
+  const datOuts = addMaps(sumBy(state.expenses.filter(e=>DAT_OUT_METHODS.includes(e.paymentMethod)), e=>e.date, e=>e.amount||0), sumBy(state.purchases.filter(p=>DAT_OUT_METHODS.includes(p.paymentMethod)), p=>p.date, p=>p.totalCost||0));
   const cons = sumBy(state.cashMovements.filter(m=>m.type==='consignacion'), m=>m.date, m=>m.amount||0);
   let bankPrev = startDoc.bankOpening||0;
   const closed = {};
@@ -2543,6 +2545,12 @@ function renderCashRegister(){
   const diffPill = d => `<span class="pill ${Math.abs(d)<1?'good':(d<0?'bad':'warn')}">${d>0?'+':''}${fmt(d)}</span>`;
   let html = '';
   if(state.pendingExpenses.length) html += `<div class="banner">⚠️ Tienes ${state.pendingExpenses.length} gasto(s) por guardar que aún no se descuentan de la caja. Complétalos en la pestaña Gastos.</div>`;
+  // Pagos cuyo monto cobrado no coincide con el total (p. ej. pedidos divididos a mano)
+  const payMismatch = (state.orders||[]).filter(o => o.paymentStatus==='pagado' && o.paymentMethod!=='datafono' && !(o.extraPayments&&o.extraPayments.length) && o.balanceDue==null && Number(o.total)>0 && Math.abs((Number(o.paymentAmount)||0) - Number(o.total)) > 1);
+  if(payMismatch.length) html += `<div class="card"><div class="item-name" style="color:var(--bad)">⚠️ Pagos que no coinciden con el total (${payMismatch.length})</div>
+    <div class="item-meta">Revisa cada pedido con su comprobante y corrige el monto cobrado.</div>
+    ${payMismatch.map(o=>`<div class="row" style="margin-top:8px"><span class="item-meta">#${escH(short(o.id))} · ${escH(o.customerName||o.spot||'')} · total ${fmt(o.total)} · cobrado ${fmt(o.paymentAmount)}</span>${can('pagos.confirmar') ? `<button class="secondary" style="width:auto;padding:6px 12px;font-size:12.5px" onclick="openPaymentAdjust('${o.id}')">✏️ Ajustar</button>` : ''}</div>`).join('')}
+  </div>`;
 
   if(!L){
     html += `<div class="card">
@@ -6523,6 +6531,33 @@ var orderAddonOf = null; // id del pedido al que se le está haciendo una adici�
     catch(e){ if(btn){ btn.disabled = false; btn.textContent = 'Cancelar y borrar'; } document.getElementById('coErr').textContent = e.message || String(e); return; }
     TOM.reloadTable && TOM.reloadTable('expenses');
     _closeModal(); toast('Pedido cancelado', 'ok');
+  };
+
+  /* ---------- Ajuste de pago por el administrador (Caja) ---------- */
+  window.openPaymentAdjust = function(id){
+    const o = state.orders.find(x=>x.id===id); if(!o) return;
+    modalBody.innerHTML = `<h3>Ajustar pago #${escH(short(id))}</h3>
+      <div class="item-meta">Total del pedido: ${fmt(o.total)} · Cobrado registrado: ${fmt(o.paymentAmount)}</div>
+      <label>Monto realmente cobrado</label>
+      <input id="adjAmount" type="number" value="${Number(o.total)||0}">
+      <label>Motivo del ajuste</label>
+      <input id="adjReason" placeholder="Ej: pedido dividido en efectivo y QR">
+      <div id="adjErr" class="item-meta" style="color:var(--bad);font-weight:700"></div>
+      <div class="modal-actions">
+        <button class="secondary" onclick="_closeModal()">Volver</button>
+        <button class="primary" id="adjBtn" onclick="savePaymentAdjust('${o.id}')">Guardar ajuste</button>
+      </div>`;
+    modalBg.classList.add('open');
+  };
+  window.savePaymentAdjust = async function(id){
+    const amount = Number(document.getElementById('adjAmount').value);
+    const reason = document.getElementById('adjReason').value.trim();
+    const err = document.getElementById('adjErr');
+    if(!reason){ err.textContent = 'Escribe el motivo del ajuste.'; return; }
+    const btn = document.getElementById('adjBtn'); if(btn){ btn.disabled = true; btn.textContent = 'Guardando…'; }
+    try{ await TOM.rpc('admin_adjust_payment', { p_order_id:id, p_amount:amount, p_reason:reason }); }
+    catch(e){ if(btn){ btn.disabled = false; btn.textContent = 'Guardar ajuste'; } err.textContent = e.message || String(e); return; }
+    _closeModal(); toast('Pago ajustado', 'ok');
   };
 
   /* ---------- 5) Descuento del vendedor por aprobar ---------- */
