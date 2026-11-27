@@ -2549,7 +2549,7 @@ function renderCashRegister(){
   const payMismatch = (state.orders||[]).filter(o => o.paymentStatus==='pagado' && o.paymentMethod!=='datafono' && !(o.extraPayments&&o.extraPayments.length) && o.balanceDue==null && Number(o.total)>0 && Math.abs((Number(o.paymentAmount)||0) - Number(o.total)) > 1);
   if(payMismatch.length) html += `<div class="card"><div class="item-name" style="color:var(--bad)">⚠️ Pagos que no coinciden con el total (${payMismatch.length})</div>
     <div class="item-meta">Revisa cada pedido con su comprobante y corrige el monto cobrado.</div>
-    ${payMismatch.map(o=>`<div class="row" style="margin-top:8px"><span class="item-meta">#${escH(short(o.id))} · ${escH(o.customerName||o.spot||'')} · total ${fmt(o.total)} · cobrado ${fmt(o.paymentAmount)}</span>${can('pagos.confirmar') ? `<button class="secondary" style="width:auto;padding:6px 12px;font-size:12.5px" onclick="openPaymentAdjust('${o.id}')">✏️ Ajustar</button>` : ''}</div>`).join('')}
+    ${payMismatch.map(o=>`<div class="row" style="margin-top:8px"><span class="item-meta">#${String(o.id).slice(0,5)} · ${String(o.customerName||o.spot||'').replace(/[<>&"']/g,'')} · total ${fmt(o.total)} · cobrado ${fmt(o.paymentAmount)}</span>${can('pagos.confirmar') ? `<button class="secondary" style="width:auto;padding:6px 12px;font-size:12.5px" onclick="openPaymentAdjust('${o.id}')">✏️ Ajustar</button>` : ''}</div>`).join('')}
   </div>`;
 
   if(!L){
