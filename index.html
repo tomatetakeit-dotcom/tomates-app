@@ -120,6 +120,9 @@ if(!window.fmtPhone) window.fmtPhone = function(p){ return p || ''; };
   .home-tile:active { transform: scale(.97); }
   .home-ic { font-size:52px; line-height:1; }
   .home-lbl { font-size:15px; text-align:center; }
+  .home-hero { grid-column: span 2; grid-row: span 2; background:#fff; border-radius:18px; box-shadow:0 4px 12px rgba(0,0,0,.15); display:flex; flex-direction:column; align-items:center; justify-content:center; padding:12px; overflow:hidden; }
+  .home-hero img { max-width:100%; max-height:100%; object-fit:contain; }
+  .home-hero figcaption { font-weight:800; font-size:14px; color:#111; margin-top:4px; text-align:center; }
   h2.section-title { font-size: 16px; margin: 4px 0 12px; }
   .card {
     background: var(--card);
@@ -5970,7 +5973,8 @@ function orderTotalBreakHtml(sub, dsc){
     const PALETTE = ['#ff3035','#111111','#ffd23f','#2a9d8f','#264653','#e76f51','#8ab17d','#6d597a'];
     const tiles = [...document.querySelectorAll('nav.tabbar button')]
       .filter(b=>b.dataset.tab!=='inicio' && b.style.display!=='none');
-    grid.innerHTML = tiles.map((b,i)=>{
+    const hero = `<figure class="home-hero" style="margin:0"><img src="assets/tomate-asistente.png" alt="Tomate asistente" width="320" height="320"><figcaption>Tomates Pizza · Panel de gestión</figcaption></figure>`;
+    grid.innerHTML = hero + tiles.map((b,i)=>{
       const ic = (b.querySelector('.ic')||{}).textContent || '';
       const label = b.textContent.replace(ic,'').trim();
       const bg = PALETTE[i % PALETTE.length];
