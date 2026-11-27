@@ -493,8 +493,8 @@ s = rep(s, "</body>", post + "</body>")
 
 (out_dir / "index.html").write_text(s, encoding="utf-8")
 import shutil
-for extra in (here.parent / "dist-static", here.parent / "brand"):
+for extra in (here.parent / "dist-static", here.parent / "brand", here.parent / "assets"):
     if extra.exists():
-        dst = out_dir if extra.name == "dist-static" else out_dir / "brand"
+        dst = {"dist-static": out_dir, "brand": out_dir / "brand", "assets": out_dir / "assets"}[extra.name]
         shutil.copytree(extra, dst, dirs_exist_ok=True)
 print("ok", len(s))
