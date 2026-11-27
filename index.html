@@ -1760,6 +1760,7 @@ function renderCobroModal(o, method){
       <button class="${method==='qr'?'active':''}" onclick="renderCobroModal(state.orders.find(x=>x.id==='${o.id}'),'qr')">QR</button>
       <button class="${method==='efectivo'?'active':''}" onclick="renderCobroModal(state.orders.find(x=>x.id==='${o.id}'),'efectivo')">Efectivo</button>
       <button class="${method==='datafono'?'active':''}" onclick="renderCobroModal(state.orders.find(x=>x.id==='${o.id}'),'datafono')">Datáfono +5%</button>
+      <button class="${method==='mixto'?'active':''}" onclick="renderCobroModal(state.orders.find(x=>x.id==='${o.id}'),'mixto')">Mixto</button>
     </div>`;
 
   if(method==='qr'){
@@ -1811,10 +1812,77 @@ function renderCobroModal(o, method){
         <button class="primary" onclick="confirmPayment('${o.id}','datafono','Datáfono (+5%)',${datafonoTotal})">✅ Confirmar pago con datáfono</button>
       </div>
     `;
+  } else if(method==='mixto'){
+    body += `
+      <div class="item-meta">Escribe cuánto se pagó con cada medio. La tarjeta lleva el recargo del 5%.</div>
+      <label>Efectivo</label>
+      <input type="number" id="mxCash" placeholder="0" oninput="updateMixedTotal(${o.total})">
+      <label>QR / transferencia</label>
+      <input type="number" id="mxQr" placeholder="0" oninput="updateMixedTotal(${o.total})">
+      <label>Tarjeta (antes del recargo)</label>
+      <input type="number" id="mxCard" placeholder="0" oninput="updateMixedTotal(${o.total})">
+      <div class="item-meta" style="margin-top:6px">Cobrado: <span id="mxSum" class="item-name" style="font-size:14px">$0</span> de ${fmt(o.total)} · <span id="mxDiff"></span></div>
+      <div class="modal-actions">
+        <button class="secondary" onclick="closeModal()">Cancelar</button>
+        <button class="primary" id="mxBtn" onclick="confirmMixedPayment('${o.id}')">✅ Confirmar pago mixto</button>
+      </div>`;
   }
 
   modalBody.innerHTML = body;
 }
+
+window.mixedLegs = function(){
+  const cash = Number(document.getElementById('mxCash').value)||0;
+  const qr = Number(document.getElementById('mxQr').value)||0;
+  const card = Number(document.getElementById('mxCard').value)||0;
+  return { cash, qr, card, cardCharged: Math.round(card*(1+DATAFONO_RECARGO)) };
+};
+window.updateMixedTotal = function(total){
+  const L = mixedLegs();
+  const sum = L.cash + L.qr + L.cardCharged;
+  document.getElementById('mxSum').textContent = fmt(sum);
+  const diff = total - sum;
+  document.getElementById('mxDiff').textContent = Math.abs(diff)<1 ? 'cuadra ✔' : (diff>0 ? `faltan ${fmt(diff)}` : `sobran ${fmt(-diff)}`);
+};
+window.confirmMixedPayment = async function(orderId){
+  const o = state.orders.find(x=>x.id===orderId); if(!o || !db) return;
+  const L = mixedLegs();
+  if(L.cash<=0 && L.qr<=0 && L.card<=0){ toast('Escribe al menos un monto.'); return; }
+  if(L.qr>0 && L.cash<=0 && L.card<=0){ toast('Solo QR: usa el cobro QR normal.'); return; }
+  if(Math.abs(L.cash + L.qr + L.cardCharged - o.total) > 1){ toast('Los montos no suman el total del pedido.'); return; }
+
+  // Medio principal (cuenta en Caja con paymentMethod): efectivo si hay, si no tarjeta.
+  // Las demás partes pagadas van en extraPayments; la parte QR queda pendiente hasta que el admin confirme.
+  const today = todayStr(), now = Date.now();
+  const labels = [];
+  const extras = [];
+  let primary, primaryAmt;
+  if(L.cash>0){ primary='efectivo'; primaryAmt=L.cash; labels.push('Efectivo'); }
+  else { primary='datafono'; primaryAmt=L.cardCharged; }
+  if(L.cash>0 && L.card>0){ extras.push({ amount:L.cardCharged, method:'datafono', date:today, at:now, by:myUid }); }
+  if(L.card>0) labels.push('Tarjeta');
+  if(L.qr>0) labels.push('QR');
+  const patch = {
+    paymentMethod: primary,
+    paymentMethodLabel: 'Mixto: ' + labels.join(' + '),
+    paymentAmount: primaryAmt,
+    mixed: true,
+    extraPayments: extras,
+    paidAt: now,
+    paidDate: today,
+  };
+  if(L.qr>0){
+    patch.paymentStatus = 'por_confirmar';
+    patch.mixedPending = { qr: L.qr };
+  } else {
+    patch.paymentStatus = 'pagado';
+  }
+  try{ await db.collection('orders').doc(orderId).update(patch); }
+  catch(e){ toast((e && e.message) || 'No se pudo guardar el pago mixto'); return; }
+  closeModal();
+  if(L.qr>0){ toast('Pago mixto guardado. Ahora registra el comprobante QR.', 'ok'); openQrProofModal(orderId); }
+  else toast('Pago mixto registrado', 'ok');
+};
 
 function updateCashPreview(total){
   const received = Number(document.getElementById('cashReceived').value)||0;
@@ -2546,7 +2614,7 @@ function renderCashRegister(){
   let html = '';
   if(state.pendingExpenses.length) html += `<div class="banner">⚠️ Tienes ${state.pendingExpenses.length} gasto(s) por guardar que aún no se descuentan de la caja. Complétalos en la pestaña Gastos.</div>`;
   // Pagos cuyo monto cobrado no coincide con el total (p. ej. pedidos divididos a mano)
-  const payMismatch = (state.orders||[]).filter(o => o.paymentStatus==='pagado' && o.paymentMethod!=='datafono' && !(o.extraPayments&&o.extraPayments.length) && o.balanceDue==null && Number(o.total)>0 && Math.abs((Number(o.paymentAmount)||0) - Number(o.total)) > 1);
+  const payMismatch = (state.orders||[]).filter(o => o.paymentStatus==='pagado' && o.paymentMethod!=='datafono' && !(o.extraPayments&&o.extraPayments.length) && o.balanceDue==null && !o.mixed && Number(o.total)>0 && Math.abs((Number(o.paymentAmount)||0) - Number(o.total)) > 1);
   if(payMismatch.length) html += `<div class="card"><div class="item-name" style="color:var(--bad)">⚠️ Pagos que no coinciden con el total (${payMismatch.length})</div>
     <div class="item-meta">Revisa cada pedido con su comprobante y corrige el monto cobrado.</div>
     ${payMismatch.map(o=>`<div class="row" style="margin-top:8px"><span class="item-meta">#${String(o.id).slice(0,5)} · ${String(o.customerName||o.spot||'').replace(/[<>&"']/g,'')} · total ${fmt(o.total)} · cobrado ${fmt(o.paymentAmount)}</span>${can('pagos.confirmar') ? `<button class="secondary" style="width:auto;padding:6px 12px;font-size:12.5px" onclick="openPaymentAdjust('${o.id}')">✏️ Ajustar</button>` : ''}</div>`).join('')}
