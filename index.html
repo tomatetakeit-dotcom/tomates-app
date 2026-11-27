@@ -5973,7 +5973,7 @@ function orderTotalBreakHtml(sub, dsc){
     const PALETTE = ['#ff3035','#111111','#ffd23f','#2a9d8f','#264653','#e76f51','#8ab17d','#6d597a'];
     const tiles = [...document.querySelectorAll('nav.tabbar button')]
       .filter(b=>b.dataset.tab!=='inicio' && b.style.display!=='none');
-    const hero = `<figure class="home-hero" style="margin:0"><img src="assets/tomate-asistente.png" alt="Tomate asistente" width="320" height="320"><figcaption>Tomates Pizza · Panel de gestión</figcaption></figure>`;
+    const hero = `<figure class="home-hero" style="margin:0"><img src="brand/icons/tomate-asistente.png" alt="Tomate asistente" width="320" height="320"><figcaption>Tomates Pizza · Panel de gestión</figcaption></figure>`;
     grid.innerHTML = hero + tiles.map((b,i)=>{
       const ic = (b.querySelector('.ic')||{}).textContent || '';
       const label = b.textContent.replace(ic,'').trim();
