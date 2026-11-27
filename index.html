@@ -113,6 +113,13 @@ if(!window.fmtPhone) window.fmtPhone = function(p){ return p || ''; };
   }
   nav.tabbar button .ic { font-size: 18px; }
   nav.tabbar button.active { color: var(--accent); font-weight: 700; }
+  /* Pantalla de inicio (admin): mosaico de opciones con iconos grandes */
+  .home-grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); grid-auto-rows: 130px; gap:12px; }
+  .home-tile { border:0; border-radius:18px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; cursor:pointer; box-shadow:0 4px 12px rgba(0,0,0,.15); font-weight:700; font-family:inherit; padding:10px; }
+  .home-tile:nth-child(5n+1) { grid-row: span 2; }
+  .home-tile:active { transform: scale(.97); }
+  .home-ic { font-size:52px; line-height:1; }
+  .home-lbl { font-size:15px; text-align:center; }
   h2.section-title { font-size: 16px; margin: 4px 0 12px; }
   .card {
     background: var(--card);
@@ -525,9 +532,16 @@ body.kds-wide main { max-width: 1500px; }
     <div id="usuariosList"><div class="empty">Cargando…</div></div>
   </section>
 
+  <!-- INICIO: pantalla de opciones para el administrador (se arma con los mismos botones de la barra inferior) -->
+  <section class="tab" id="tab-inicio">
+    <h2 class="section-title">Inicio</h2>
+    <div class="home-grid" id="homeGrid"></div>
+  </section>
+
 </main>
 
 <nav class="tabbar">
+  <button data-tab="inicio" id="inicioTabBtn" style="display:none"><span class="ic">🏠</span>Inicio</button>
   <button data-tab="pedidos" class="active"><span class="ic">🧾</span>Ventas</button>
   <button data-tab="menu"><span class="ic">🍕</span>Menú</button>
   <button data-tab="recetas"><span class="ic">📋</span>Recetas</button>
@@ -5925,7 +5939,8 @@ function orderTotalBreakHtml(sub, dsc){
   const TAB_PERMS = {
     pedidos:['ventas.ver','domicilios.ver'], cocina:['cocina.ver'], menu:['menu.gestionar','menu.ver_costos'], recetas:['menu.ver_costos'],
     inventario:['inventario.ver'], compras:['compras.gestionar'], gastos:['gastos.gestionar'], caja:['caja.ver'],
-    clientes:['clientes.ver'], informes:['informes.ver'], analisis:['analisis.ver'], usuarios:['usuarios.gestionar']
+    clientes:['clientes.ver'], informes:['informes.ver'], analisis:['analisis.ver'], usuarios:['usuarios.gestionar'],
+    inicio:['usuarios.gestionar'] /* solo administrador */
   };
   const TOP_PERMS = { pedidos:'ventas.crear', menu:'menu.gestionar', recetas:'menu.gestionar', inventario:'menu.gestionar',
                       compras:'compras.gestionar', gastos:'gastos.gestionar', clientes:'clientes.editar' };
@@ -5949,11 +5964,38 @@ function orderTotalBreakHtml(sub, dsc){
   const _updateTopAction = window.updateTopAction;
   window.updateTopAction = function(tab){ _updateTopAction(tab); if(TOM.profile) syncTopAction(); };
 
+  // Pantalla de inicio: un mosaico con los mismos accesos de la barra inferior que el usuario puede ver
+  window.renderHome = function(){
+    const grid = document.getElementById('homeGrid'); if(!grid) return;
+    const PALETTE = ['#ff3035','#111111','#ffd23f','#2a9d8f','#264653','#e76f51','#8ab17d','#6d597a'];
+    const tiles = [...document.querySelectorAll('nav.tabbar button')]
+      .filter(b=>b.dataset.tab!=='inicio' && b.style.display!=='none');
+    grid.innerHTML = tiles.map((b,i)=>{
+      const ic = (b.querySelector('.ic')||{}).textContent || '';
+      const label = b.textContent.replace(ic,'').trim();
+      const bg = PALETTE[i % PALETTE.length];
+      const fg = bg==='#ffd23f' ? '#111' : '#fff';
+      return `<button class="home-tile" data-go="${b.dataset.tab}" style="background:${bg};color:${fg}"><span class="home-ic">${ic}</span><span class="home-lbl">${label}</span></button>`;
+    }).join('');
+    grid.onclick = (e)=>{
+      const t = e.target.closest('[data-go]'); if(!t) return;
+      const target = document.querySelector(`nav.tabbar button[data-tab="${t.dataset.go}"]`);
+      if(target) target.click();
+    };
+  };
+  document.querySelector('nav.tabbar button[data-tab="inicio"]').addEventListener('click', ()=>renderHome());
+
   window.initRole = async function(){
     myUid = TOM.user.id;
     myRole = TOM.profile.role;
     applyRoleUI();
     renderAll();
+    // Al entrar, el administrador ve primero la pantalla de inicio (una sola vez por sesión)
+    const inicioBtn = document.getElementById('inicioTabBtn');
+    if(!window._homeShownOnce && inicioBtn && inicioBtn.style.display !== 'none'){
+      window._homeShownOnce = true;
+      inicioBtn.click();
+    }
   };
 
   // Si el administrador cambia permisos o roles, la app se ajusta sola
