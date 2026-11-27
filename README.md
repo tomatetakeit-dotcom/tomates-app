@@ -43,7 +43,7 @@ Registro libre desactivado: solo entran personas invitadas por el administrador.
 
 ## Publicar en Render
 
-- Build command: `rm -rf dist && mkdir -p dist && cp index.html menu.html manifest.webmanifest sw.js dist/ && base64 -d brand.tgz.b64 | tar -xzf - -C dist && ls -R dist`
+- Build command: `rm -rf dist && mkdir -p dist && cp index.html menu.html manifest.webmanifest sw.js dist/ && cp -R assets dist/assets && base64 -d brand.tgz.b64 | tar -xzf - -C dist && ls -R dist`
 - Publish directory: `dist`
 - Header: `/manifest.webmanifest` → `Content-Type: application/manifest+json`
 - El repositorio está conectado como repositorio público: después de cada cambio hay que hacer **Manual Deploy → Deploy latest commit**.

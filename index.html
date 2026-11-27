@@ -247,6 +247,7 @@ if(!window.fmtPhone) window.fmtPhone = function(p){ return p || ''; };
   .ord-cat:focus-visible, .ord-add:focus-visible, .ord-bar button:focus-visible, .ord-empty button:focus-visible { outline:3px solid #fff; outline-offset:2px; }
   .ord-media { position:relative; width:100%; aspect-ratio:4/3; border-radius:12px; overflow:hidden; background:#111; }
   .ord-img { width:100%; height:100%; object-fit:cover; display:block; }
+  .ord-img-cat { object-fit:contain; }
   .ord-ph { position:absolute; inset:0; align-items:center; justify-content:center; padding:6px; text-align:center; font-size:11px; font-weight:700; color:#bcbcbc; background:repeating-linear-gradient(45deg,#1c1c1c 0 8px,#222 8px 16px); display:flex; }
   .ord-badge { position:absolute; top:6px; left:6px; background:#ff3035; color:#111; font-weight:800; font-size:12px; padding:2px 8px; border-radius:999px; }
   .ord-cat .ord-badge { position:static; align-self:flex-start; }
@@ -1496,6 +1497,21 @@ function ordInCart(productId){
   return orderCart.filter(l => l.type==='entera' && l.productId===productId).reduce((s,l)=>s+l.qty,0);
 }
 // Imagen con placeholder discreto. Si la foto falla al cargar, muestra el placeholder sin bucles.
+// Ilustraciones de categoría (estáticas, en assets/menu). No se guardan en la base ni sustituyen fotos de producto.
+const ORD_CATEGORY_IMAGES = Object.freeze({
+  'Pizza x 4': 'assets/menu/pizza-x4.webp',
+  'Pizza x 6': 'assets/menu/pizza-x6.webp',
+  'Bebidas': 'assets/menu/bebidas.webp',
+  'Congelados': 'assets/menu/congelados.webp',
+  'Adiciones': 'assets/menu/adiciones.webp',
+  'Postres': 'assets/menu/postres.webp',
+  'Sanduches': 'assets/menu/sanduches.webp',
+});
+function ordCatImgHtml(presId){
+  const src = ORD_CATEGORY_IMAGES[presId];
+  if(!src) return ordImgHtml({}, 0);
+  return `<div class="ord-media"><img class="ord-img ord-img-cat" src="${src}" alt="" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><div class="ord-ph" style="display:none"><span>Imagen pendiente</span></div></div>`;
+}
 function ordImgHtml(p, size){
   const src = productImageSrc(p);
   const ph = `<div class="ord-ph" style="display:${src?'none':'flex'}"><span>Imagen pendiente</span></div>`;
@@ -1523,7 +1539,7 @@ function ordCatalogHtml(){
     body = `<h4 class="ord-title">¿Qué vamos a agregar?</h4>
       <div class="ord-grid ord-grid-cats">${tiles.map(t => `
         <button type="button" class="ord-cat" onclick='selectOrderCategory(${JSON.stringify(t.id)})'>
-          ${ordImgHtml({}, 0)}
+          ${ordCatImgHtml(t.id)}
           ${t.pizza ? `<span class="ord-badge">${t.pizza} porciones</span>` : ''}
           <span class="ord-cat-name">${esc(t.label)}</span>
           <span class="ord-cat-count">${t.n} ${t.n===1?'producto':'productos'}</span>
