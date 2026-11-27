@@ -234,6 +234,35 @@ if(!window.fmtPhone) window.fmtPhone = function(p){ return p || ''; };
   #toastBox { position:fixed; top:calc(env(safe-area-inset-top, 0px) + 10px); left:50%; transform:translateX(-50%); width:min(92%, 420px); z-index:60; pointer-events:none; }
   .toast { pointer-events:auto; margin-bottom:8px; padding:12px 14px; border-radius:12px; font-size:13.5px; font-weight:600; box-shadow:0 4px 14px rgba(0,0,0,0.3); background:var(--accent); color:#ffffff; }
   .toast.ok { background:var(--fg); color:var(--bg); }
+  /* ---- Catálogo por categorías (etapa 1) ---- */
+  .ord-sr { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); }
+  .ord-catalog input[type=search] { width:100%; min-height:48px; margin:8px 0 6px; padding:10px 12px; border:1px solid #777; border-radius:14px; background:#1c1c1c; color:#fff; }
+  .ord-title { margin:10px 0 6px; font-family: Impact, "Arial Narrow", Arial, sans-serif; font-weight:400; text-transform:uppercase; font-size:20px; }
+  .ord-head { display:flex; align-items:center; justify-content:space-between; gap:8px; margin:4px 0; flex-wrap:wrap; }
+  .ord-crumb { font-size:13px; opacity:.8; }
+  .ord-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; margin-top:8px; }
+  @media (min-width:640px){ .ord-grid { grid-template-columns:repeat(3,minmax(0,1fr)); } }
+  .ord-cat, .ord-card { position:relative; display:flex; flex-direction:column; align-items:stretch; gap:4px; padding:8px; border:1px solid #444; border-radius:18px; background:#1c1c1c; color:#fff; text-align:left; font:inherit; min-width:0; }
+  .ord-cat { cursor:pointer; min-height:48px; }
+  .ord-cat:focus-visible, .ord-add:focus-visible, .ord-bar button:focus-visible, .ord-empty button:focus-visible { outline:3px solid #fff; outline-offset:2px; }
+  .ord-media { position:relative; width:100%; aspect-ratio:4/3; border-radius:12px; overflow:hidden; background:#111; }
+  .ord-img { width:100%; height:100%; object-fit:cover; display:block; }
+  .ord-ph { position:absolute; inset:0; align-items:center; justify-content:center; padding:6px; text-align:center; font-size:11px; font-weight:700; color:#bcbcbc; background:repeating-linear-gradient(45deg,#1c1c1c 0 8px,#222 8px 16px); display:flex; }
+  .ord-badge { position:absolute; top:6px; left:6px; background:#ff3035; color:#111; font-weight:800; font-size:12px; padding:2px 8px; border-radius:999px; }
+  .ord-cat .ord-badge { position:static; align-self:flex-start; }
+  .ord-cat-name { font-weight:800; font-size:15px; }
+  .ord-cat-count { font-size:12px; color:#bcbcbc; }
+  .ord-card-name { font-weight:700; font-size:14px; line-height:1.2; }
+  .ord-card-price { font-weight:800; color:#ff3035; font-size:14px; }
+  .ord-scope, .ord-note, .ord-inpedido { font-size:11px; color:#bcbcbc; }
+  .ord-note { color:#ffd0d2; }
+  .ord-add { margin-top:auto; min-height:44px; border:2px solid #ff3035; border-radius:14px; background:#ff3035; color:#111; font-weight:800; cursor:pointer; }
+  .ord-empty { margin-top:12px; padding:12px; border:1px dashed #777; border-radius:14px; }
+  .ord-empty p { margin:0 0 8px; }
+  .ord-empty-actions { display:flex; gap:8px; flex-wrap:wrap; }
+  .ord-bar { position:sticky; bottom:0; z-index:2; display:flex; align-items:center; justify-content:space-between; gap:8px; margin-top:12px; padding:10px 12px; background:#1c1c1c; border:1px solid #444; border-radius:14px; }
+  .ord-bar button { min-height:44px; border-radius:14px; border:2px solid #ff3035; background:#ff3035; color:#111; font-weight:800; padding:0 14px; }
+  @media (min-width:900px){ .ord-bar { display:none; } }
 </style>
 <meta name="theme-color" content="#FF3035">
 <link rel="manifest" href="manifest.webmanifest">
@@ -1432,7 +1461,137 @@ function openOrderModal(orderId){
   modalBg.classList.add('open');
 }
 
+// ---------- Catálogo por categorías de presentación (V2/V3, etapa 1) ----------
+// Solo cambia la presentación: no renombra categorías, ni IDs, ni precios.
+let orderCatalogQuery = '';
+const ORD_PRES = [
+  { id:'Pizza x 4',  label:'Pizza x 4',  porciones:4, match:['Pizzas 4'] },
+  { id:'Pizza x 6',  label:'Pizza x 6',  porciones:6, match:['Pizzas'] },
+  { id:'Bebidas',    label:'Bebidas',    match:['Bebidas'] },
+  { id:'Congelados', label:'Congelados', match:['Congelados'] },
+  // "Otros" (adición vegetales x6) se presenta en Adiciones mientras su clasificación está pendiente.
+  { id:'Adiciones',  label:'Adiciones',  match:['Adiciones','Otros'] },
+  { id:'Postres',    label:'Postres',    match:['Postres'] },
+  { id:'Sanduches',  label:'Sanduches',  match:['Sanduches'] },
+];
+function ordPresOf(p){
+  const c = p.category || 'Otros';
+  const hit = ORD_PRES.find(g => g.match.includes(c));
+  return hit ? hit.id : 'Otros';
+}
+function ordPresLabel(id){
+  const g = ORD_PRES.find(x => x.id === id);
+  return g ? g.label : id;
+}
+function ordNorm(s){
+  return String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/\s+/g,' ').trim();
+}
+function ordMatches(p, q){
+  const terms = ordNorm(q).split(' ').filter(Boolean);
+  if(!terms.length) return true;
+  const hay = ordNorm([p.name, p.description, p.ingredients, ordPresLabel(ordPresOf(p))].filter(Boolean).join(' '));
+  return terms.every(t => hay.includes(t));
+}
+function ordInCart(productId){
+  return orderCart.filter(l => l.type==='entera' && l.productId===productId).reduce((s,l)=>s+l.qty,0);
+}
+// Imagen con placeholder discreto. Si la foto falla al cargar, muestra el placeholder sin bucles.
+function ordImgHtml(p, size){
+  const src = productImageSrc(p);
+  const ph = `<div class="ord-ph" style="display:${src?'none':'flex'}"><span>Imagen pendiente</span></div>`;
+  const img = src ? `<img class="ord-img" src="${src}" alt="" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">` : '';
+  return `<div class="ord-media" style="--ord-size:${size}px">${img}${ph}</div>`;
+}
+function ordCatalogHtml(){
+  const q = orderCatalogQuery;
+  const inCat = orderCategoryFilter !== null;
+  const counts = {};
+  state.products.forEach(p => { const k = ordPresOf(p); counts[k] = (counts[k]||0)+1; });
+
+  // Campo de búsqueda: global en la pantalla de categorías, local dentro de una categoría.
+  const searchHtml = inCat
+    ? `<label for="catSearch" class="ord-sr">Buscar sabor en ${ordPresLabel(orderCategoryFilter)}</label>
+       <input id="catSearch" type="search" autocomplete="off" placeholder="Buscar sabor en ${ordPresLabel(orderCategoryFilter)}…" value="${esc(q)}" oninput="onCatalogSearch(this)">`
+    : `<label for="catSearch" class="ord-sr">Buscar en todo el menú</label>
+       <input id="catSearch" type="search" autocomplete="off" placeholder="Buscar en todo el menú…" value="${esc(q)}" oninput="onCatalogSearch(this)">`;
+
+  let body = '';
+  if(!inCat && !q){
+    // Pantalla de categorías: siete tarjetas + Otros solo si quedara algún producto sin clasificar.
+    const tiles = ORD_PRES.map(g => ({ id:g.id, label:g.label, n:counts[g.id]||0, pizza: g.porciones }))
+      .concat((counts['Otros']||0) > 0 ? [{ id:'Otros', label:'Otros', n:counts['Otros'] }] : []);
+    body = `<h4 class="ord-title">¿Qué vamos a agregar?</h4>
+      <div class="ord-grid ord-grid-cats">${tiles.map(t => `
+        <button type="button" class="ord-cat" onclick='selectOrderCategory(${JSON.stringify(t.id)})'>
+          ${ordImgHtml({}, 0)}
+          ${t.pizza ? `<span class="ord-badge">${t.pizza} porciones</span>` : ''}
+          <span class="ord-cat-name">${esc(t.label)}</span>
+          <span class="ord-cat-count">${t.n} ${t.n===1?'producto':'productos'}</span>
+        </button>`).join('')}
+      </div>`;
+  } else {
+    // Lista de productos: global (sin categoría, con consulta) o dentro de la categoría.
+    let list = state.products.filter(p => ordMatches(p, q) && (inCat ? ordPresOf(p)===orderCategoryFilter : true));
+    if(!inCat) list = list.slice().sort((a,b) => ORD_PRES.findIndex(g=>g.id===ordPresOf(a)) - ORD_PRES.findIndex(g=>g.id===ordPresOf(b)) || String(a.name).localeCompare(String(b.name)));
+    const head = inCat
+      ? `<div class="ord-head"><button type="button" class="ghost" onclick="selectOrderCategory(null)">← Categorías</button>
+           <span class="ord-crumb">Categorías / ${esc(ordPresLabel(orderCategoryFilter))}</span></div>
+         <h4 class="ord-title">${esc(ordPresLabel(orderCategoryFilter))}</h4>
+         <div class="item-meta">${counts[orderCategoryFilter]||0} ${(counts[orderCategoryFilter]||0)===1?'producto':'productos'}${list.length!==(counts[orderCategoryFilter]||0)?` · ${list.length} con esa búsqueda`:''}</div>`
+      : `<div class="ord-head"><button type="button" class="ghost" onclick="clearCatalogSearch()">← Categorías</button></div>
+         <div class="item-meta">Resultados en todo el menú: ${list.length}</div>`;
+    const cards = list.map(p => {
+      const pres = ordPresOf(p);
+      const badge = (pres==='Pizza x 4' || pres==='Pizza x 6') ? `<span class="ord-badge">${pres==='Pizza x 4'?'x4':'x6'}</span>` : '';
+      const n = ordInCart(p.id);
+      const scope = inCat ? '' : `<span class="ord-scope">${esc(ordPresLabel(pres))}</span>`;
+      const pending = (p.category||'')==='Otros' ? `<span class="ord-note">Clasificación pendiente</span>` : '';
+      return `
+      <div class="ord-card">
+        <div class="ord-card-media">${ordImgHtml(p, 0)}${badge}</div>
+        <div class="ord-card-name">${esc(p.name)}</div>
+        ${scope}${pending}
+        <div class="ord-card-price">${fmt(p.price)}</div>
+        ${n ? `<div class="ord-inpedido">En el pedido: ${n}</div>` : ''}
+        <button type="button" class="ord-add" onclick="onProductTap('${p.id}')">Agregar</button>
+      </div>`;
+    }).join('');
+    const empty = `<div class="ord-empty"><p>No encontramos productos con esa búsqueda.</p>
+      <div class="ord-empty-actions">
+        ${q ? `<button type="button" class="secondary" onclick="clearCatalogSearch()">Limpiar búsqueda</button>` : ''}
+        ${inCat && q ? `<button type="button" class="secondary" onclick="searchAllMenu()">Buscar en todo el menú</button>` : ''}
+      </div></div>`;
+    body = head + `<div class="ord-grid">${cards}</div>` + (list.length ? '' : empty);
+  }
+
+  const units = orderCart.reduce((s,l)=>s+l.qty,0);
+  const total = orderCart.reduce((s,l)=>s+l.price*l.qty,0);
+  const bar = orderCart.length
+    ? `<div class="ord-bar"><span>Pedido actual · ${units} ${units===1?'unidad':'unidades'} · <b>${fmt(total)}</b></span>
+       <button type="button" class="primary" onclick="document.getElementById('cartWrap').scrollIntoView({behavior:'smooth',block:'start'})">Ver pedido</button></div>`
+    : '';
+  return `<div class="ord-catalog">${searchHtml}${body}</div>${bar}`;
+}
+function onCatalogSearch(el){
+  orderCatalogQuery = el.value;
+  renderOrderMainScreen();
+  const n = document.getElementById('catSearch');
+  if(n){ n.focus(); const L = n.value.length; n.setSelectionRange(L, L); }
+}
+function clearCatalogSearch(){
+  orderCatalogQuery = '';
+  renderOrderMainScreen();
+  const n = document.getElementById('catSearch'); if(n) n.focus();
+}
+function searchAllMenu(){
+  // Cambio de alcance explícito: se conserva la consulta y se avisa en la pantalla.
+  orderCategoryFilter = null;
+  renderOrderMainScreen();
+  const n = document.getElementById('catSearch'); if(n){ n.focus(); const L=n.value.length; n.setSelectionRange(L,L); }
+}
+
 function selectOrderCategory(cat){
+  orderCatalogQuery = '';
   orderCategoryFilter = cat;
   renderOrderMainScreen();
 }
@@ -1469,30 +1628,7 @@ function renderOrderMainScreen(){
   const cartTotal = orderCart.reduce((s,l)=>s+l.price*l.qty,0);
   const total = cartTotal - discountAmountFor(orderDiscount, cartTotal) + (orderDeliveryFee||0) - deliveryDiscountFor(orderDiscount, orderDeliveryFee);
 
-  let backButtonHtml = '';
-  let gridHtml;
-  if(orderCategoryFilter===null){
-    const counts = {};
-    state.products.forEach(p=>{ const cat = p.category || 'Otros'; counts[cat] = (counts[cat]||0)+1; });
-    const catNames = Object.keys(counts).sort();
-    gridHtml = catNames.map(cat=>`
-      <div class="prod-tile" onclick='selectOrderCategory(${JSON.stringify(cat)})'>
-        <div style="width:64px;height:64px;border-radius:10px;background:var(--accent-soft);color:var(--accent);display:flex;align-items:center;justify-content:center;font-size:26px">🍽️</div>
-        <div class="prod-tile-name">${cat}</div>
-        <div class="prod-tile-price">${counts[cat]} ítem${counts[cat]>1?'s':''}</div>
-      </div>
-    `).join('');
-  } else {
-    backButtonHtml = `<button class="ghost" style="margin-bottom:8px" onclick="selectOrderCategory(null)">← Categorías</button>`;
-    const prods = state.products.filter(p=>(p.category||'Otros')===orderCategoryFilter);
-    gridHtml = prods.map(p=>`
-      <div class="prod-tile" onclick="onProductTap('${p.id}')">
-        ${productThumbHtml(p, 64)}
-        <div class="prod-tile-name">${p.name}</div>
-        <div class="prod-tile-price">${fmt(p.price)}</div>
-      </div>
-    `).join('');
-  }
+  const catalogHtml = ordCatalogHtml();
 
   const cartHtml = orderCart.length ? orderCart.map(l=>`
     <div class="row" style="margin-bottom:8px;align-items:center">
@@ -1520,8 +1656,7 @@ function renderOrderMainScreen(){
       <button type="button" class="ot-chip${orderType==='llevar'?' on':''}" onclick="selectOrderType('llevar')">🥡 Para llevar</button>
       ${ORDER_SPOTS.map(sp=>`<button type="button" class="ot-chip${orderType==='local'&&orderSpot===sp?' on':''}" onclick="selectOrderType('local','${sp}')">${sp}</button>`).join('')}
     </div>
-    ${backButtonHtml}
-    <div class="prod-grid">${gridHtml}</div>
+    ${catalogHtml}
     <label style="margin-top:14px">Carrito</label>
     <div id="cartWrap">${cartHtml}</div>
     ${orderCart.length && (activePromos().length || can('ventas.descuento_libre') || can('ventas.crear') || orderDiscount) ? `
