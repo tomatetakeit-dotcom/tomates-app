@@ -42,6 +42,9 @@
   /* ---------- Lectura del comprobante con IA ----------
      La IA lee banco, valor, fecha, hora, referencia y destinatario. La app compara con el pedido
      y marca "✔ Coincide" o "⚠️ Revisar". El administrador siempre confirma (decisión de Lucas). */
+  // Monto que debe cubrir el comprobante QR: la parte QR de un pago mixto, o el saldo / total
+  const proofExpected = (o)=> (o.mixedPending && Number(o.mixedPending.qr)>0) ? Number(o.mixedPending.qr)
+    : (Number(o.balanceDue)>0 ? Number(o.balanceDue) : Number(o.total)||0);
   let payCfg = { accounts: [] };
   async function loadPayCfg(){ const { data } = await sb.from('config').select('data').eq('id','pagos').maybeSingle(); payCfg = Object.assign({ accounts: [] }, (data && data.data) || {}); }
   TOM.whenReady.then(loadPayCfg);
@@ -49,7 +52,7 @@
   const normTxt = (t)=> String(t||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9 ]/g,' ').replace(/\s+/g,' ').trim();
   window.checkPaymentProof = function(o, ai, ref){
     const issues = [], oks = [];
-    const expected = Number(o.balanceDue)>0 ? Number(o.balanceDue) : Number(o.total)||0;
+    const expected = proofExpected(o);
     if(!ai) return { ok:false, issues:['No se leyó con IA'], oks };
     if(ai.es_comprobante===false || ai.legible===false) issues.push('No parece un comprobante legible' + (ai.observaciones ? ': '+ai.observaciones : ''));
     if(ai.exitosa===false) issues.push('El comprobante no dice que la transacción fue exitosa');
@@ -82,7 +85,7 @@
     const box = document.getElementById('qpAi'); if(!box) return null;
     box.innerHTML = '🤖 Leyendo el comprobante con IA… (unos segundos)';
     const isPdf = blob.type==='application/pdf';
-    const expected = Number(o.balanceDue)>0 ? Number(o.balanceDue) : Number(o.total)||0;
+    const expected = proofExpected(o);
     const { data, error } = await sb.functions.invoke('read-payment', { body: { file: await tomatesBlobToBase64(blob), mediaType: isPdf ? 'application/pdf' : 'image/jpeg',
       expected, accounts: (payCfg.accounts||[]).map(a=>({ nombre:a.label||'', titular:a.holder||'', ultimos4:a.last4||'' })), today: todayStr() } });
     if(error){
